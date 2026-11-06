@@ -24,6 +24,7 @@ void RegisterFile::Reset()
     gpr_.fill(0);
     fpr_.fill(0.0);
     csr_.fill(0);
+    vreg_.fill(VectorRegister{});
     csr_[0x002] = 0b000; // Default: RNE (IEEE 754)
     emit registerResetSignal();
 }
@@ -75,6 +76,22 @@ void RegisterFile::WriteCsr(size_t reg, uint64_t value)
     if (reg >= NUM_CSR)
         throw std::out_of_range("Invalid CSR index");
     csr_[reg] = value;
+}
+
+RegisterFile::VectorRegister RegisterFile::ReadVreg(size_t reg) const
+{
+    if (reg >= NUM_VREG)
+        throw std::out_of_range("Invalid vector register index");
+
+    return vreg_[reg];
+}
+
+void RegisterFile::WriteVreg(size_t reg, const VectorRegister &value)
+{
+    if (reg >= NUM_VREG)
+        throw std::out_of_range("Invalid vector register index");
+
+    vreg_[reg] = value;
 }
 
 std::vector<uint64_t> RegisterFile::GetGprValues() const

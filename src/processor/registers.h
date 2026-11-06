@@ -13,6 +13,10 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <cstddef>
+#include <cstdint>
+#include <stdexcept>
+#include <type_traits>
 
 namespace Kites
 {
@@ -22,6 +26,67 @@ namespace Kites
 class RegisterFile : public QObject
 {
     Q_OBJECT
+  public:
+    static constexpr size_t NUM_VREG = 32;
+    static constexpr size_t VLEN_BITS = 128;
+    static constexpr size_t VLEN_BYTES = VLEN_BITS / 8;
+
+    using VectorRegister = std::array<uint8_t, VLEN_BYTES>;
+    
+    template <typename T>
+    [[nodiscard]] T ReadVregElement(size_t reg, size_t element) const
+    {
+        static_assert(
+            std::is_same_v<T, uint8_t> ||
+            std::is_same_v<T, uint16_t> ||
+            std::is_same_v<T, uint32_t> ||
+            std::is_same_v<T, uint64_t>,
+            "Unsupported vector element type"
+        );
+
+        if (reg >= NUM_VREG)
+            throw std::out_of_range("Invalid vector register index");
+
+        if (element >= VLEN_BYTES / sizeof(T))
+            throw std::out_of_range("Invalid vector element index");
+
+        size_t offset = element * sizeof(T);
+        uint64_t value = 0;
+
+        for (size_t i = 0; i < sizeof(T); ++i)
+        {
+            value |= static_cast<uint64_t>(vreg_[reg][offset + i]) << (8 * i);
+        }
+
+        return static_cast<T>(value);
+    }
+
+    template <typename T>
+    void WriteVregElement(size_t reg, size_t element, T value)
+    {
+        static_assert(
+            std::is_same_v<T, uint8_t> ||
+            std::is_same_v<T, uint16_t> ||
+            std::is_same_v<T, uint32_t> ||
+            std::is_same_v<T, uint64_t>,
+            "Unsupported vector element type"
+        );
+
+        if (reg >= NUM_VREG)
+            throw std::out_of_range("Invalid vector register index");
+
+        if (element >= VLEN_BYTES / sizeof(T))
+            throw std::out_of_range("Invalid vector element index");
+
+        size_t offset = element * sizeof(T);
+
+        for (size_t i = 0; i < sizeof(T); ++i)
+        {
+            vreg_[reg][offset + i] =
+                static_cast<uint8_t>((static_cast<uint64_t>(value) >> (8 * i)) & 0xFF);
+        }
+    }
+
   private:
     static constexpr size_t NUM_GPR = 32; ///< Number of General-Purpose Registers (GPR).
     static constexpr size_t NUM_FPR = 32; ///< Number of Floating-Point Registers (FPR).
@@ -32,6 +97,8 @@ class RegisterFile : public QObject
     static constexpr size_t NUM_CSR = 4096; ///< Number of Control and Status Registers (CSR).
 
     std::array<uint64_t, NUM_CSR> csr_ = {}; ///< Array for storing CSR values.
+
+    std::array<VectorRegister, NUM_VREG> vreg_ = {};
 
   public:
     /**
@@ -82,12 +149,27 @@ class RegisterFile : public QObject
     [[nodiscard]] uint64_t ReadCsr(size_t reg) const;
 
     void WriteCsr(size_t reg, uint64_t value);
+    
+    /**
+     * @brief Reads the contents of a Vector Register.
+     * @param reg The index of the vector register.
+     * @return All bytes stored in the vector register.
+     */
+    [[nodiscard]] VectorRegister ReadVreg(size_t reg) const;
+
+    /**
+     * @brief Writes a value to a Vector Register.
+     * @param reg The index of the vector register.
+     * @param value The 16-byte value to write.
+     */
+    void WriteVreg(size_t reg, const VectorRegister &value);
 
     /**
      * @brief Retrieves the values of all General-Purpose Registers (GPR).
      * @return A vector containing the values of all GPRs.
      */
     [[nodiscard]] std::vector<uint64_t> GetGprValues() const;
+
 
     /**
      * @brief Retrieves the values of all Floating-Point Registers (FPR).
