@@ -23,6 +23,7 @@
 #include <stack>
 #include <thread>
 #include <tuple>
+#include "processor/vector_config.h"
 
 namespace Kites
 {
@@ -177,6 +178,15 @@ void RVSSProcessor::Execute()
 {
     uint8_t opcode = current_instruction_ & 0b1111111;
     uint8_t funct3 = (current_instruction_ >> 12) & 0b111;
+    
+    // Handle vector configuration instructions.
+    if (opcode == 0x57 &&
+    funct3 == 0b111 &&
+    ((current_instruction_ >> 31) & 1) == 0)
+    {
+        ExecuteVsetvli();
+        return;
+    }
 
     if (opcode == 0b1110011 && funct3 == 0b000)
     {
@@ -404,6 +414,49 @@ void RVSSProcessor::ExecuteCsr()
     csr_uimm_ = rs1;
 }
 
+void RVSSProcessor::ExecuteVsetvli()
+{
+    uint8_t rd = (current_instruction_ >> 7) & 0b11111;
+    uint8_t rs1 = (current_instruction_ >> 15) & 0b11111;
+
+    // Extract the 11-bit VTYPE immediate.
+    uint64_t vtype_imm = (current_instruction_ >> 20) & 0x7FF;
+
+    vector_rd_ = rd;
+
+    // Determine AVL (Application Vector Length).
+    uint64_t avl;
+
+    if (rs1 == 0 && rd != 0)
+    {
+        // rs1=x0, rd!=x0: AVL = maximum unsigned value.
+        avl = UINT64_MAX;
+    }
+    else if (rs1 == 0 && rd == 0)
+    {
+        // rs1=x0, rd=x0: AVL = current vl.
+        avl = registers_.ReadCsr(RegisterFile::CSR_VL);
+    }
+    else
+    {
+        avl = registers_.ReadGpr(rs1);
+    }
+
+    // Decode the requested vector configuration.
+    VectorConfig config = DecodeVectorConfig(vtype_imm);
+
+    if (config.vill)
+    {
+        // Invalid VTYPE: set vill and make vl zero.
+        vector_new_vtype_ = uint64_t{1} << 63;
+        vector_new_vl_ = 0;
+    }
+    else
+    {
+        vector_new_vtype_ = vtype_imm;
+        vector_new_vl_ = CalculateVectorLength(avl, config.vlmax);
+    }
+}
 // TODO: implement writeback for syscalls
 void RVSSProcessor::HandleSyscall()
 {
@@ -826,6 +879,13 @@ void RVSSProcessor::WriteBack()
     uint8_t rd = (current_instruction_ >> 7) & 0b11111;
     int32_t imm = ImmGenerator(current_instruction_);
 
+    if (opcode == 0x57 &&
+    funct3 == 0b111 &&
+    ((current_instruction_ >> 31) & 1) == 0)
+    {
+        WriteBackVsetvli();
+        return;
+    }
     if (opcode == 0b1110011 && funct3 == 0b000)
     {
         return;
@@ -1062,6 +1122,56 @@ void RVSSProcessor::WriteBackCsr()
     if (old_csr != new_csr)
     {
         current_delta_.register_changes.push_back({csr_target_address_, 1, old_csr, new_csr});
+    }
+}
+
+void RVSSProcessor::WriteBackVsetvli()
+{
+    // Update vl.
+    uint64_t old_vl = registers_.ReadCsr(RegisterFile::CSR_VL);
+    registers_.WriteCsr(RegisterFile::CSR_VL, vector_new_vl_);
+
+    if (old_vl != vector_new_vl_)
+    {
+        current_delta_.register_changes.push_back(
+            {RegisterFile::CSR_VL, 1, old_vl, vector_new_vl_}
+        );
+    }
+
+    // Update vtype.
+    uint64_t old_vtype = registers_.ReadCsr(RegisterFile::CSR_VTYPE);
+    registers_.WriteCsr(RegisterFile::CSR_VTYPE, vector_new_vtype_);
+
+    if (old_vtype != vector_new_vtype_)
+    {
+        current_delta_.register_changes.push_back(
+            {RegisterFile::CSR_VTYPE, 1, old_vtype, vector_new_vtype_}
+        );
+    }
+
+    // Reset vstart to zero.
+    uint64_t old_vstart = registers_.ReadCsr(RegisterFile::CSR_VSTART);
+    registers_.WriteCsr(RegisterFile::CSR_VSTART, 0);
+
+    if (old_vstart != 0)
+    {
+        current_delta_.register_changes.push_back(
+            {RegisterFile::CSR_VSTART, 1, old_vstart, 0}
+        );
+    }
+
+    // Write the resulting vl into rd, unless rd is x0.
+    if (vector_rd_ != 0)
+    {
+        uint64_t old_rd = registers_.ReadGpr(vector_rd_);
+        registers_.WriteGpr(vector_rd_, vector_new_vl_);
+
+        if (old_rd != vector_new_vl_)
+        {
+            current_delta_.register_changes.push_back(
+                {vector_rd_, 0, old_rd, vector_new_vl_}
+            );
+        }
     }
 }
 

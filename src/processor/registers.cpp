@@ -17,6 +17,7 @@ namespace Kites
 {
 RegisterFile::RegisterFile(QObject *parent) : QObject(parent)
 {
+    Reset();
 }
 
 void RegisterFile::Reset()
@@ -26,6 +27,12 @@ void RegisterFile::Reset()
     csr_.fill(0);
     vreg_.fill(VectorRegister{});
     csr_[0x002] = 0b000; // Default: RNE (IEEE 754)
+
+    csr_[CSR_VSTART] = 0;
+    csr_[CSR_VL] = 0;
+    csr_[CSR_VTYPE] = 0;
+    csr_[CSR_VLENB] = VLEN_BYTES;
+
     emit registerResetSignal();
 }
 

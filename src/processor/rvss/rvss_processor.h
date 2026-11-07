@@ -46,6 +46,10 @@ class RVSSProcessor : public ProcessorBase
     uint64_t csr_old_value_{};
     uint64_t csr_write_val_{};
     uint8_t csr_uimm_{};
+    // Vector configuration intermediate variables
+    uint8_t vector_rd_{};
+    uint64_t vector_new_vl_{};
+    uint64_t vector_new_vtype_{};
 
     std::stack<StepDelta> undo_stack_;
     std::stack<StepDelta> redo_stack_;
@@ -60,6 +64,7 @@ class RVSSProcessor : public ProcessorBase
     void ExecuteFloat();
     void ExecuteDouble();
     void ExecuteCsr();
+    void ExecuteVsetvli();
     void HandleSyscall();
 
     void WriteMemory();
@@ -70,6 +75,7 @@ class RVSSProcessor : public ProcessorBase
     void WriteBackFloat();
     void WriteBackDouble();
     void WriteBackCsr();
+    void WriteBackVsetvli();
 
     RVSSProcessor();
     ~RVSSProcessor();

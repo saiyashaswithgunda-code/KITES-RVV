@@ -30,6 +30,10 @@ class RegisterFile : public QObject
     static constexpr size_t NUM_VREG = 32;
     static constexpr size_t VLEN_BITS = 128;
     static constexpr size_t VLEN_BYTES = VLEN_BITS / 8;
+    static constexpr size_t CSR_VSTART = 0x008;
+    static constexpr size_t CSR_VL     = 0xC20;
+    static constexpr size_t CSR_VTYPE  = 0xC21;
+    static constexpr size_t CSR_VLENB  = 0xC22;
 
     using VectorRegister = std::array<uint8_t, VLEN_BYTES>;
     
