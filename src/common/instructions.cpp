@@ -19,6 +19,14 @@ namespace instruction_set
 {
 
 std::unordered_map<Instruction, InstructionEncoding> instruction_encoding_map = {
+    {Instruction::kvsetvli, {0b1010111, -1, 0b111, -1, -1, -1}},
+    {Instruction::kvadd_vv, {0b1010111, -1, 0b000, -1, 0b000000, -1}},
+    {Instruction::kvsub_vv, {0b1010111, -1, 0b000, -1, 0b000010, -1}},
+    {Instruction::kvand_vv, {0b1010111, -1, 0b000, -1, 0b001001, -1}},
+    {Instruction::kvor_vv,  {0b1010111, -1, 0b000, -1, 0b001010, -1}},
+    {Instruction::kvxor_vv, {0b1010111, -1, 0b000, -1, 0b001011, -1}},
+    
+
     {Instruction::kadd, {0b0110011, -1, 0b000, -1, -1, 0b0000000}},
     {Instruction::ksub, {0b0110011, -1, 0b000, -1, -1, 0b0100000}},
     {Instruction::ksll, {0b0110011, -1, 0b001, -1, -1, 0b0000000}},
@@ -189,6 +197,13 @@ std::unordered_map<Instruction, InstructionEncoding> instruction_encoding_map = 
 };
 
 std::unordered_map<std::string, Instruction> instruction_string_map = {
+    {"vsetvli", Instruction::kvsetvli},
+    {"vadd.vv", Instruction::kvadd_vv},
+    {"vsub.vv", Instruction::kvsub_vv},
+    {"vand.vv", Instruction::kvand_vv},
+    {"vor.vv", Instruction::kvor_vv},
+    {"vxor.vv", Instruction::kvxor_vv},
+
     {"add", Instruction::kadd},
     {"sub", Instruction::ksub},
     {"and", Instruction::kand},
@@ -351,6 +366,13 @@ std::unordered_map<std::string, Instruction> instruction_string_map = {
 };
 
 static const std::unordered_set<std::string> valid_instructions = {
+
+    "vsetvli","vadd.vv",
+    "vsub.vv",
+    "vand.vv",
+    "vor.vv",
+    "vxor.vv",
+
     "add", "sub", "and", "or", "xor", "sll", "srl", "sra", "slt", "sltu", "addw", "subw", "sllw",
     "srlw", "sraw", "addi", "xori", "ori", "andi", "slli", "srli", "srai", "slti", "sltiu", "addiw",
     "slliw", "srliw", "sraiw", "lb", "lh", "lw", "ld", "lbu", "lhu", "lwu", "sb", "sh", "sw", "sd",
@@ -423,7 +445,7 @@ static const std::unordered_set<std::string> ITypeInstructions = {
     "srliw", "sraiw", "lb",  "lh",   "lw",   "ld",   "lbu",  "lhu",  "lwu",   "jalr"};
 
 static const std::unordered_set<std::string> I1TypeInstructions = {
-    "addi", "xori", "ori", "andi", "sltiu", "slti", "addiw", "lb",
+    "vsetvli","addi", "xori", "ori", "andi", "sltiu", "slti", "addiw", "lb",
     "lh",   "lw",   "ld",  "lbu",  "lhu",   "lwu",  "jalr"};
 
 static const std::unordered_set<std::string> I2TypeInstructions = {"slli",  "srli",  "srai",
@@ -553,6 +575,7 @@ std::unordered_map<std::string, RTypeInstructionEncoding> R_type_instruction_enc
 };
 
 std::unordered_map<std::string, I1TypeInstructionEncoding> I1_type_instruction_encoding_map = {
+    {"vsetvli", {0b1010111, 0b111}},//O_GPR_C_GPR_C_VTYPE
     {"addi", {0b0010011, 0b000}},  // O_GPR_C_GPR_C_I
     {"xori", {0b0010011, 0b100}},  // O_GPR_C_GPR_C_I
     {"ori", {0b0010011, 0b110}},   // O_GPR_C_GPR_C_I
@@ -761,6 +784,14 @@ std::unordered_map<std::string, FDSTypeInstructionEncoding> F_D_S_type_instructi
     IL -> Instruction Label
 */
 std::unordered_map<std::string, std::vector<SyntaxType>> instruction_syntax_map = {
+
+    {"vsetvli", {SyntaxType::O_GPR_C_GPR_C_VTYPE}},
+    {"vadd.vv", {SyntaxType::O_VREG_C_VREG_C_VREG}},
+    {"vsub.vv", {SyntaxType::O_VREG_C_VREG_C_VREG}},
+    {"vand.vv", {SyntaxType::O_VREG_C_VREG_C_VREG}},
+    {"vor.vv", {SyntaxType::O_VREG_C_VREG_C_VREG}},
+    {"vxor.vv", {SyntaxType::O_VREG_C_VREG_C_VREG}},
+
     {"add", {SyntaxType::O_GPR_C_GPR_C_GPR}},
     {"sub", {SyntaxType::O_GPR_C_GPR_C_GPR}},
     {"xor", {SyntaxType::O_GPR_C_GPR_C_GPR}},

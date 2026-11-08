@@ -14,6 +14,16 @@
 
 namespace Kites
 {
+
+static bool isVectorVVInstruction(const std::string &opcode)
+{
+    return opcode == "vadd.vv" ||
+           opcode == "vsub.vv" ||
+           opcode == "vand.vv" ||
+           opcode == "vor.vv"  ||
+           opcode == "vxor.vv";
+}
+
 std::vector<std::string>
 printIntermediateCode(const std::vector<std::pair<ICUnit, bool>> &IntermediateCode)
 {
@@ -22,8 +32,12 @@ printIntermediateCode(const std::vector<std::pair<ICUnit, bool>> &IntermediateCo
     {
         const ICUnit &block = pair.first;
         std::string code;
-
-        if (instruction_set::isValidRTypeInstruction(block.getOpcode()))
+        if (isVectorVVInstruction(block.getOpcode()))
+        {
+            code = block.getOpcode() + " " + block.getRd() + ", " +
+                block.getRs2() + ", " + block.getRs1();
+        }
+        else if (instruction_set::isValidRTypeInstruction(block.getOpcode()))
         {
             code = block.getOpcode() + " " + block.getRd() + " " + block.getRs1() + " " +
                    block.getRs2();
@@ -65,6 +79,46 @@ printIntermediateCode(const std::vector<std::pair<ICUnit, bool>> &IntermediateCo
 static inline uint32_t extractRegisterIndex(const std::string &reg)
 {
     return static_cast<uint32_t>(std::stoi(reg.substr(1)));
+}
+
+uint32_t generateVectorVVTypeMachineCode(const ICUnit &block)
+{
+    uint32_t funct6 = 0;
+
+    const std::string opcode = block.getOpcode();
+
+    if (opcode == "vadd.vv")
+        funct6 = 0b000000;
+    else if (opcode == "vsub.vv")
+        funct6 = 0b000010;
+    else if (opcode == "vand.vv")
+        funct6 = 0b001001;
+    else if (opcode == "vor.vv")
+        funct6 = 0b001010;
+    else if (opcode == "vxor.vv")
+        funct6 = 0b001011;
+    else
+        throw std::runtime_error("Unsupported vector instruction: " + opcode);
+
+    const uint32_t vd  = extractRegisterIndex(block.getRd());
+    const uint32_t vs1 = extractRegisterIndex(block.getRs1());
+    const uint32_t vs2 = extractRegisterIndex(block.getRs2());
+
+    constexpr uint32_t vm = 1;
+    constexpr uint32_t funct3 = 0b000;
+    constexpr uint32_t opcodeBits = 0b1010111;
+
+    uint32_t machineCode = 0;
+
+    machineCode |= (funct6 << 26);
+    machineCode |= (vm << 25);
+    machineCode |= (vs2 << 20);
+    machineCode |= (vs1 << 15);
+    machineCode |= (funct3 << 12);
+    machineCode |= (vd << 7);
+    machineCode |= opcodeBits;
+
+    return machineCode;
 }
 
 uint32_t generateRTypeMachineCode(const ICUnit &block)
@@ -366,7 +420,11 @@ generateMachineCode(const std::vector<std::pair<ICUnit, bool>> &IntermediateCode
     {
         const ICUnit &block = pair.first;
         uint32_t code;
-        if (instruction_set::isValidRTypeInstruction(block.getOpcode()))
+        if (isVectorVVInstruction(block.getOpcode()))
+        {
+            code = generateVectorVVTypeMachineCode(block);
+        }
+        else if (instruction_set::isValidRTypeInstruction(block.getOpcode()))
         {
             code = generateRTypeMachineCode(block);
         }

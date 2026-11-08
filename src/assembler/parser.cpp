@@ -339,6 +339,16 @@ void Parser::parseTextDirective()
             {
                 switch (syntax)
                 {
+                case instruction_set::SyntaxType::O_GPR_C_GPR_C_VTYPE:
+                {
+                    valid_syntax = parse_vsetvli();
+                    break;
+                }
+                case instruction_set::SyntaxType::O_VREG_C_VREG_C_VREG:
+                {
+                    valid_syntax = parse_vector_vv();
+                    break;
+                }
                 case instruction_set::SyntaxType::O_GPR_C_GPR_C_GPR:
                 {
                     valid_syntax = parse_O_GPR_C_GPR_C_GPR();

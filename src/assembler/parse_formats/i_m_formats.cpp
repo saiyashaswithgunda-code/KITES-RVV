@@ -551,4 +551,138 @@ bool Parser::parse_O_GPR_C_I_LP_GPR_RP()
     }
     return false;
 }
+
+
+bool Parser::parse_vsetvli()
+{
+    const unsigned int line = currentToken().line_number;
+
+    // Validate the complete six-operand instruction.
+    if (peekToken(1).line_number != line ||
+        peekToken(1).type != TokenType::GP_REGISTER ||
+        peekToken(2).type != TokenType::COMMA ||
+        peekToken(3).line_number != line ||
+        peekToken(3).type != TokenType::GP_REGISTER ||
+        peekToken(4).type != TokenType::COMMA ||
+        peekToken(5).line_number != line ||
+        peekToken(5).type != TokenType::LABEL_REF ||
+        peekToken(6).type != TokenType::COMMA ||
+        peekToken(7).line_number != line ||
+        peekToken(7).type != TokenType::LABEL_REF ||
+        peekToken(8).type != TokenType::COMMA ||
+        peekToken(9).line_number != line ||
+        peekToken(9).type != TokenType::LABEL_REF ||
+        peekToken(10).type != TokenType::COMMA ||
+        peekToken(11).line_number != line ||
+        peekToken(11).type != TokenType::LABEL_REF ||
+        (peekToken(12).type != TokenType::EOF_ &&
+         peekToken(12).line_number == line))
+    {
+        return false;
+    }
+
+    // Decode SEW.
+    int vsew = -1;
+    const std::string sew = peekToken(5).value;
+
+    if (sew == "e8")       vsew = 0;
+    else if (sew == "e16") vsew = 1;
+    else if (sew == "e32") vsew = 2;
+    else if (sew == "e64") vsew = 3;
+
+    // Decode LMUL.
+    int vlmul = -1;
+    const std::string lmul = peekToken(7).value;
+
+    if (lmul == "m1")       vlmul = 0;
+    else if (lmul == "m2")  vlmul = 1;
+    else if (lmul == "m4")  vlmul = 2;
+    else if (lmul == "m8")  vlmul = 3;
+    else if (lmul == "mf8") vlmul = 5;
+    else if (lmul == "mf4") vlmul = 6;
+    else if (lmul == "mf2") vlmul = 7;
+
+    // Decode tail policy.
+    int vta = -1;
+    const std::string tail = peekToken(9).value;
+
+    if (tail == "tu")      vta = 0;
+    else if (tail == "ta") vta = 1;
+
+    // Decode mask policy.
+    int vma = -1;
+    const std::string mask = peekToken(11).value;
+
+    if (mask == "mu")      vma = 0;
+    else if (mask == "ma") vma = 1;
+
+    // Reject invalid VTYPE operands.
+    if (vsew == -1 || vlmul == -1 || vta == -1 || vma == -1)
+    {
+        return false;
+    }
+
+    // Construct the 11-bit VTYPE immediate.
+    const uint32_t zimm =
+        (static_cast<uint32_t>(vma) << 7) |
+        (static_cast<uint32_t>(vta) << 6) |
+        (static_cast<uint32_t>(vsew) << 3) |
+        static_cast<uint32_t>(vlmul);
+
+    ICUnit block;
+    block.setOpcode(currentToken().value);
+    block.setLineNumber(line);
+    block.setInstructionIndex(instruction_index_);
+
+    block.setRd(reg_alias_to_name.at(peekToken(1).value));
+    block.setRs1(reg_alias_to_name.at(peekToken(3).value));
+    block.setImm(std::to_string(zimm));
+
+    skipCurrentLine();
+
+    intermediate_code_.emplace_back(block, true);
+    instruction_number_line_number_mapping_[instruction_index_] = line;
+    instruction_index_++;
+
+    return true;
+}
+
+bool Parser::parse_vector_vv()
+{
+    const unsigned int line = currentToken().line_number;
+
+    // Validate: instruction vd, vs2, vs1
+    if (peekToken(1).line_number != line ||
+        peekToken(1).type != TokenType::VEC_REGISTER ||
+        peekToken(2).type != TokenType::COMMA ||
+        peekToken(3).line_number != line ||
+        peekToken(3).type != TokenType::VEC_REGISTER ||
+        peekToken(4).type != TokenType::COMMA ||
+        peekToken(5).line_number != line ||
+        peekToken(5).type != TokenType::VEC_REGISTER ||
+        (peekToken(6).type != TokenType::EOF_ &&
+         peekToken(6).line_number == line))
+    {
+        return false;
+    }
+
+    ICUnit block;
+    block.setOpcode(currentToken().value);
+    block.setLineNumber(line);
+    block.setInstructionIndex(instruction_index_);
+
+    // RISC-V vector operand order: vd, vs2, vs1.
+    block.setRd(peekToken(1).value);
+    block.setRs2(peekToken(3).value);
+    block.setRs1(peekToken(5).value);
+
+    skipCurrentLine();
+
+    intermediate_code_.emplace_back(block, true);
+    instruction_number_line_number_mapping_[instruction_index_] = line;
+    instruction_index_++;
+
+    return true;
+}
+
 }// namespace Kites

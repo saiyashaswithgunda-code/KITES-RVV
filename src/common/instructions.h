@@ -23,6 +23,14 @@ namespace instruction_set
 //vishank used it god knows why and i am too lazy to change it
 enum class Instruction
 {
+    kvsetvli,
+    kvadd_vv,
+    kvsub_vv,
+    kvand_vv,
+    kvor_vv,
+    kvxor_vv,
+
+
     kadd,
     ksub,
     kand,
@@ -412,6 +420,9 @@ struct FDSTypeInstructionEncoding
  */
 enum class SyntaxType
 {
+    O_GPR_C_GPR_C_VTYPE, ///< Opcode general-register , general-register , vtypeimmediate
+    O_VREG_C_VREG_C_VREG, ///< Opcode vector-register, vector-register, vector-register
+
     O_GPR_C_GPR_C_GPR,   ///< Opcode general-register , general-register , register
     O_GPR_C_GPR_C_I,     ///< Opcode general-register , general-register , immediate
     O_GPR_C_I,           ///< Opcode general-register , immediate

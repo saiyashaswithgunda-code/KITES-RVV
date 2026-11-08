@@ -138,6 +138,15 @@ Token Lexer::identifier()
     {
         return {TokenType::CSR_REGISTER, value, line_number_, start_column};
     }
+    
+    // Recognize vector registers: v0 through v31.
+    static const std::regex vector_register_regex(
+        "^v([0-9]|[12][0-9]|3[01])$"
+    );
+    if (std::regex_match(value, vector_register_regex))
+    {
+        return {TokenType::VEC_REGISTER, value, line_number_, start_column};
+    }
 
     if (isValidRoundingMode(value))
     {
