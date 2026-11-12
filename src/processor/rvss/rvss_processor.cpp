@@ -471,61 +471,65 @@ void RVSSProcessor::ExecuteVsetvli()
         vector_new_vl_ = CalculateVectorLength(avl, config.vlmax);
     }
 }
+
 void RVSSProcessor::ExecuteVectorArithmetic()
 {
-    // Clear the pending flag before processing this instruction.
     vector_arithmetic_pending_ = false;
 
-    uint8_t funct6 = (current_instruction_ >> 26) & 0x3F;
-    uint8_t vm = (current_instruction_ >> 25) & 0x01;
+    const uint8_t funct6 = (current_instruction_ >> 26) & 0x3F;
+    const uint8_t vm = (current_instruction_ >> 25) & 0x01;
 
     vector_vd_ = (current_instruction_ >> 7) & 0x1F;
-    uint8_t vs1 = (current_instruction_ >> 15) & 0x1F;
-    uint8_t vs2 = (current_instruction_ >> 20) & 0x1F;
+    const uint8_t vs1 = (current_instruction_ >> 15) & 0x1F;
+    const uint8_t vs2 = (current_instruction_ >> 20) & 0x1F;
 
-    // This implementation currently supports unmasked operations only.
-    if (vm != 1)
-        return;
-
-    // Identify the supported operation.
     switch (funct6)
     {
-    case 0b000000: // vadd.vv
-    case 0b000010: // vsub.vv
-    case 0b001001: // vand.vv
-    case 0b001010: // vor.vv
-    case 0b001011: // vxor.vv
+    case 0b000000:
+    case 0b000010:
+    case 0b001001:
+    case 0b001010:
+    case 0b001011:
         break;
 
     default:
         return;
     }
 
-    // Read the current vector configuration.
-    uint64_t vtype = registers_.ReadCsr(RegisterFile::CSR_VTYPE);
-    uint64_t vl = registers_.ReadCsr(RegisterFile::CSR_VL);
-    uint64_t vstart = registers_.ReadCsr(RegisterFile::CSR_VSTART);
+    const uint64_t vtype =
+        registers_.ReadCsr(RegisterFile::CSR_VTYPE);
 
-    VectorConfig config = DecodeVectorConfig(vtype);
+    const uint64_t vl =
+        registers_.ReadCsr(RegisterFile::CSR_VL);
 
-    if (config.vill || config.sew_bits == 0)
+    const uint64_t vstart =
+        registers_.ReadCsr(RegisterFile::CSR_VSTART);
+
+    const VectorConfig config = DecodeVectorConfig(vtype);
+
+    if (config.vill || config.sew_bits == 0 ||
+        vl > config.vlmax || vstart > vl)
+    {
         return;
+    }
 
-    // Save the old destination and copy it into the result.
-    // Inactive elements will remain unchanged.
     vector_old_value_ = registers_.ReadVreg(vector_vd_);
     vector_new_value_ = vector_old_value_;
 
-    // Read source registers before modifying anything.
-    RegisterFile::VectorRegister source1 = registers_.ReadVreg(vs1);
-    RegisterFile::VectorRegister source2 = registers_.ReadVreg(vs2);
+    // Snapshot v0 before modifying the destination.
+    const RegisterFile::VectorRegister mask_register =
+        registers_.ReadVreg(0);
 
-    unsigned int element_bytes = config.sew_bits / 8;
+    const RegisterFile::VectorRegister source1 =
+        registers_.ReadVreg(vs1);
 
-    // Prevent accessing elements beyond the physical vector register.
-    unsigned int max_elements = RegisterFile::VLEN_BYTES / element_bytes;
+    const RegisterFile::VectorRegister source2 =
+        registers_.ReadVreg(vs2);
 
-    // Read one little-endian element from a vector register.
+    const unsigned int element_bytes = config.sew_bits / 8;
+    const unsigned int max_elements =
+        RegisterFile::VLEN_BYTES / element_bytes;
+
     auto read_element = [](const RegisterFile::VectorRegister &reg,
                            unsigned int index,
                            unsigned int bytes) -> uint64_t
@@ -542,7 +546,6 @@ void RVSSProcessor::ExecuteVectorArithmetic()
         return value;
     };
 
-    // Write one little-endian element into a vector register.
     auto write_element = [](RegisterFile::VectorRegister &reg,
                             unsigned int index,
                             unsigned int bytes,
@@ -555,51 +558,86 @@ void RVSSProcessor::ExecuteVectorArithmetic()
         }
     };
 
-    // Create a mask corresponding to the configured SEW.
-    uint64_t element_mask =
+    const uint64_t element_mask =
         (config.sew_bits == 64)
             ? UINT64_MAX
             : ((1ULL << config.sew_bits) - 1);
 
-    // Execute the operation element by element.
-    for (uint64_t i = vstart;
-         i < vl && i < max_elements;
-         i++)
+    // Process active vector elements.
+    for (uint64_t i = vstart; i < vl; i++)
     {
-        uint64_t a = read_element(source2, i, element_bytes);
-        uint64_t b = read_element(source1, i, element_bytes);
+        // vm=1 means unmasked execution.
+        // vm=0 means consult the corresponding bit in v0.
+        const bool mask_active =
+            vm == 1 ||
+            ((mask_register[i / 8] >> (i % 8)) & 1) != 0;
+
+        if (!mask_active)
+        {
+            // Mask-agnostic: write all ones.
+            // Mask-undisturbed: retain the old destination value.
+            if (config.mask_agnostic)
+            {
+                write_element(
+                    vector_new_value_,
+                    static_cast<unsigned int>(i),
+                    element_bytes,
+                    element_mask);
+            }
+
+            continue;
+        }
+
+        const uint64_t a =
+            read_element(source2, i, element_bytes);
+
+        const uint64_t b =
+            read_element(source1, i, element_bytes);
 
         uint64_t result = 0;
 
         switch (funct6)
         {
-        case 0b000000: // vadd.vv
+        case 0b000000:
             result = a + b;
             break;
 
-        case 0b000010: // vsub.vv
+        case 0b000010:
             result = a - b;
             break;
 
-        case 0b001001: // vand.vv
+        case 0b001001:
             result = a & b;
             break;
 
-        case 0b001010: // vor.vv
+        case 0b001010:
             result = a | b;
             break;
 
-        case 0b001011: // vxor.vv
+        case 0b001011:
             result = a ^ b;
             break;
         }
 
-        result &= element_mask;
+        write_element(
+            vector_new_value_,
+            static_cast<unsigned int>(i),
+            element_bytes,
+            result & element_mask);
+    }
 
-        write_element(vector_new_value_,
-                      static_cast<unsigned int>(i),
-                      element_bytes,
-                      result);
+    // Tail elements: [vl, VLMAX).
+    // Prestart elements [0, vstart) remain undisturbed.
+    if (config.tail_agnostic)
+    {
+        for (uint64_t i = vl; i < max_elements; i++)
+        {
+            write_element(
+                vector_new_value_,
+                static_cast<unsigned int>(i),
+                element_bytes,
+                element_mask);
+        }
     }
 
     vector_arithmetic_pending_ = true;
@@ -613,7 +651,8 @@ void RVSSProcessor::ExecuteVectorMemory()
     const uint8_t opcode = instruction & 0x7F;
     const uint8_t funct3 = (instruction >> 12) & 0x7;
 
-    // We support only unmasked, unit-stride, single-field operations.
+    // We support unit-stride, single-field operations.
+    // Both masked and unmasked operations are supported.
     const uint8_t nf = (instruction >> 29) & 0x7;
     const uint8_t mew = (instruction >> 28) & 0x1;
     const uint8_t mop = (instruction >> 26) & 0x3;
@@ -621,7 +660,7 @@ void RVSSProcessor::ExecuteVectorMemory()
     const uint8_t lumop_sumop = (instruction >> 20) & 0x1F;
 
     if (nf != 0 || mew != 0 || mop != 0 ||
-        vm != 1 || lumop_sumop != 0)
+        lumop_sumop != 0)
     {
         return;
     }
@@ -649,12 +688,13 @@ void RVSSProcessor::ExecuteVectorMemory()
         return;
     }
 
-    // Require the memory element width to match the configured SEW.
+    // Decode the current vector configuration.
     const uint64_t vtype =
         registers_.ReadCsr(RegisterFile::CSR_VTYPE);
 
     const VectorConfig config = DecodeVectorConfig(vtype);
 
+    // Require the memory element width to match the configured SEW.
     if (config.vill ||
         config.sew_bits != vector_mem_element_bytes_ * 8)
     {
@@ -675,6 +715,14 @@ void RVSSProcessor::ExecuteVectorMemory()
         return;
     }
 
+    // Save mask and tail configuration.
+    vector_mem_vm_ = vm;
+    vector_mem_tail_agnostic_ = config.tail_agnostic;
+    vector_mem_mask_agnostic_ = config.mask_agnostic;
+
+    // Snapshot v0 so masking uses its original contents.
+    vector_mem_mask_value_ = registers_.ReadVreg(0);
+
     vector_mem_load_ = (opcode == 0x07);
 
     // Bits 11:7 contain vd for loads and vs3 for stores.
@@ -689,7 +737,7 @@ void RVSSProcessor::ExecuteVectorMemory()
     vector_mem_old_value_ =
         registers_.ReadVreg(vector_mem_reg_);
 
-    // Loads will modify this copy; stores use the original data.
+    // Loads modify this copy; stores use the original data.
     vector_mem_new_value_ = vector_mem_old_value_;
 
     vector_mem_pending_ = true;
@@ -1116,6 +1164,7 @@ void RVSSProcessor::WriteMemoryDouble()
         current_delta_.memory_changes.push_back({addr, old_bytes_vec, new_bytes_vec});
     }
 }
+
 void RVSSProcessor::WriteMemoryVector()
 {
     if (!vector_mem_pending_)
@@ -1134,14 +1183,34 @@ void RVSSProcessor::WriteMemoryVector()
 
     for (uint64_t i = vstart; i < vl && i < max_elements; ++i)
     {
+        const size_t offset = i * element_bytes;
+
+        // vm=1 means unmasked; otherwise check bit i in v0.
+        const bool mask_active =
+            vector_mem_vm_ == 1 ||
+            ((vector_mem_mask_value_[i / 8] >> (i % 8)) & 0x01) != 0;
+
+        if (!mask_active)
+        {
+            if (vector_mem_load_ && vector_mem_mask_agnostic_)
+            {
+                // Mask-agnostic load: inactive destination elements become all ones.
+                for (size_t b = 0; b < element_bytes; ++b)
+                {
+                    vector_mem_new_value_[offset + b] = 0xFF;
+                }
+            }
+
+            // Masked-off stores never access memory.
+            continue;
+        }
+
         const uint64_t address =
             vector_mem_base_ + i * element_bytes;
 
-        const size_t offset = i * element_bytes;
-
         if (vector_mem_load_)
         {
-            // Read the active element into the pending destination.
+            // Load the active element into the pending destination.
             for (size_t b = 0; b < element_bytes; ++b)
             {
                 vector_mem_new_value_[offset + b] =
@@ -1163,7 +1232,7 @@ void RVSSProcessor::WriteMemoryVector()
                     vector_mem_old_value_[offset + b]);
             }
 
-            // Write the vector element to memory.
+            // Write the active vector element to memory.
             for (size_t b = 0; b < element_bytes; ++b)
             {
                 memory_controller_.writeByte(
@@ -1178,7 +1247,22 @@ void RVSSProcessor::WriteMemoryVector()
             }
         }
     }
+
+    // Tail-agnostic behavior applies to loads, not stores.
+    if (vector_mem_load_ && vector_mem_tail_agnostic_)
+    {
+        for (uint64_t i = vl; i < max_elements; ++i)
+        {
+            const size_t offset = i * element_bytes;
+
+            for (size_t b = 0; b < element_bytes; ++b)
+            {
+                vector_mem_new_value_[offset + b] = 0xFF;
+            }
+        }
+    }
 }
+
 void RVSSProcessor::WriteBack()
 {
     uint8_t opcode = current_instruction_ & 0b1111111;
@@ -1870,6 +1954,10 @@ void RVSSProcessor::Reset()
     vector_mem_pending_ = false;
     vector_mem_old_value_.fill(0);
     vector_mem_new_value_.fill(0);
+    vector_mem_vm_ = 1;
+    vector_mem_tail_agnostic_ = false;
+    vector_mem_mask_agnostic_ = false;
+    vector_mem_mask_value_.fill(0);
 
     current_delta_.vector_register_changes.clear();
 }

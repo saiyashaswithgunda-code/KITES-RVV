@@ -62,6 +62,11 @@ class RVSSProcessor : public ProcessorBase
     bool vector_mem_load_{};
     bool vector_mem_pending_{};
 
+    uint8_t vector_mem_vm_{1};
+    bool vector_mem_tail_agnostic_{};
+    bool vector_mem_mask_agnostic_{};
+
+    RegisterFile::VectorRegister vector_mem_mask_value_{};
     RegisterFile::VectorRegister vector_mem_old_value_{};
     RegisterFile::VectorRegister vector_mem_new_value_{};
 

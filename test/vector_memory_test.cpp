@@ -17,8 +17,16 @@ using RegisterFile = Kites::RegisterFile;
 
 constexpr uint64_t BASE_ADDRESS = 0x100;
 
+void SetMask(RegisterFile &registers, uint8_t mask)
+{
+    registers.WriteVregElement<uint8_t>(0, 0, mask);
+}
+
 // Encode: vsetvli x0, x1, eSEW, m1, tu, mu
-uint32_t EncodeVsetvli(unsigned int sew_bits)
+uint32_t EncodeVsetvli(
+    unsigned int sew_bits,
+    bool tail_agnostic = false,
+    bool mask_agnostic = false)
 {
     uint32_t vsew = 0;
 
@@ -31,7 +39,10 @@ uint32_t EncodeVsetvli(unsigned int sew_bits)
     default: return 0;
     }
 
-    const uint32_t vtype = vsew << 3;
+    const uint32_t vtype =
+        (vsew << 3) |
+        (static_cast<uint32_t>(tail_agnostic) << 6) |
+        (static_cast<uint32_t>(mask_agnostic) << 7);
 
     return (vtype << 20) |
            (1u << 15) |
@@ -43,9 +54,10 @@ uint32_t EncodeVsetvli(unsigned int sew_bits)
 uint32_t EncodeVle(
     uint32_t funct3,
     uint32_t vd = 3,
-    uint32_t rs1 = 10)
+    uint32_t rs1 = 10,
+    uint32_t vm = 1)
 {
-    return (1u << 25) |  // vm = 1
+    return (vm << 25) |
            (rs1 << 15) |
            (funct3 << 12) |
            (vd << 7) |
@@ -56,9 +68,10 @@ uint32_t EncodeVle(
 uint32_t EncodeVse(
     uint32_t funct3,
     uint32_t vs3 = 3,
-    uint32_t rs1 = 10)
+    uint32_t rs1 = 10,
+    uint32_t vm = 1)
 {
-    return (1u << 25) |  // vm = 1
+    return (vm << 25) |
            (rs1 << 15) |
            (funct3 << 12) |
            (vs3 << 7) |
@@ -69,12 +82,14 @@ void LoadVectorMemoryProgram(
     Processor &processor,
     unsigned int sew_bits,
     unsigned int avl,
-    uint32_t vector_instruction)
+    uint32_t vector_instruction,
+    bool tail_agnostic = false,
+    bool mask_agnostic = false)
 {
     Kites::AssembledProgram program;
 
     program.text_buffer = {
-        EncodeVsetvli(sew_bits),
+        EncodeVsetvli(sew_bits, tail_agnostic, mask_agnostic),
         vector_instruction
     };
 
@@ -512,5 +527,242 @@ TEST(VectorMemoryTest, RedoReappliesMemoryStore)
 
     ExpectMemoryElements<uint32_t>(
         processor, BASE_ADDRESS, {10, 20, 30, 40}
+    );
+}
+TEST(VectorMemoryTest, MaskedLoad)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    LoadVectorMemoryProgram(
+        processor, 32, 4, EncodeVle(0b110, 3, 10, 0)
+    );
+
+    WriteMemoryElements<uint32_t>(
+        processor, BASE_ADDRESS, {10, 20, 30, 40}
+    );
+
+    WriteVectorElements<uint32_t>(
+        processor.registers_, 3, {99, 99, 99, 99}
+    );
+
+    SetMask(processor.registers_, 0b00000101);
+
+    processor.Step();
+
+    ExpectVectorElements<uint32_t>(
+        processor.registers_, 3, {10, 99, 30, 99}
+    );
+}
+
+TEST(VectorMemoryTest, MaskedStore)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    LoadVectorMemoryProgram(
+        processor, 32, 4, EncodeVse(0b110, 3, 10, 0)
+    );
+
+    WriteVectorElements<uint32_t>(
+        processor.registers_, 3, {10, 20, 30, 40}
+    );
+
+    WriteMemoryElements<uint32_t>(
+        processor, BASE_ADDRESS, {99, 99, 99, 99}
+    );
+
+    SetMask(processor.registers_, 0b00000101);
+
+    processor.Step();
+
+    ExpectMemoryElements<uint32_t>(
+        processor, BASE_ADDRESS, {10, 99, 30, 99}
+    );
+}
+TEST(VectorMemoryTest, MaskAgnosticLoad)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    LoadVectorMemoryProgram(
+        processor, 32, 4,
+        EncodeVle(0b110, 3, 10, 0),
+        false, true
+    );
+
+    WriteMemoryElements<uint32_t>(
+        processor, BASE_ADDRESS, {10, 20, 30, 40}
+    );
+
+    SetMask(processor.registers_, 0b00000101);
+
+    processor.Step();
+
+    ExpectVectorElements<uint32_t>(
+        processor.registers_, 3,
+        {10, UINT32_MAX, 30, UINT32_MAX}
+    );
+}
+TEST(VectorMemoryTest, TailAgnosticLoad)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    LoadVectorMemoryProgram(
+        processor, 32, 2,
+        EncodeVle(0b110),
+        true, false
+    );
+
+    WriteMemoryElements<uint32_t>(
+        processor, BASE_ADDRESS, {10, 20, 30, 40}
+    );
+
+    WriteVectorElements<uint32_t>(
+        processor.registers_, 3, {99, 99, 99, 99}
+    );
+
+    processor.Step();
+
+    ExpectVectorElements<uint32_t>(
+        processor.registers_, 3,
+        {10, 20, UINT32_MAX, UINT32_MAX}
+    );
+}
+TEST(VectorMemoryTest, MaskedLoadRespectsVstart)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    LoadVectorMemoryProgram(
+        processor, 32, 4, EncodeVle(0b110, 3, 10, 0)
+    );
+
+    WriteMemoryElements<uint32_t>(
+        processor, BASE_ADDRESS, {10, 20, 30, 40}
+    );
+
+    WriteVectorElements<uint32_t>(
+        processor.registers_, 3, {99, 99, 99, 99}
+    );
+
+    SetMask(processor.registers_, 0b00000101);
+
+    processor.registers_.WriteCsr(
+        RegisterFile::CSR_VSTART, 1
+    );
+
+    processor.Step();
+
+    ExpectVectorElements<uint32_t>(
+        processor.registers_, 3, {99, 99, 30, 99}
+    );
+
+    EXPECT_EQ(
+        processor.registers_.ReadCsr(RegisterFile::CSR_VSTART),
+        0
+    );
+}
+TEST(VectorMemoryTest, MaskedStoreUndoRedo)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    LoadVectorMemoryProgram(
+        processor, 32, 4, EncodeVse(0b110, 3, 10, 0)
+    );
+
+    WriteVectorElements<uint32_t>(
+        processor.registers_, 3, {10, 20, 30, 40}
+    );
+
+    WriteMemoryElements<uint32_t>(
+        processor, BASE_ADDRESS, {99, 99, 99, 99}
+    );
+
+    SetMask(processor.registers_, 0b00000101);
+
+    processor.Step();
+
+    ExpectMemoryElements<uint32_t>(
+        processor, BASE_ADDRESS, {10, 99, 30, 99}
+    );
+
+    processor.Undo();
+
+    ExpectMemoryElements<uint32_t>(
+        processor, BASE_ADDRESS, {99, 99, 99, 99}
+    );
+
+    processor.Redo();
+
+    ExpectMemoryElements<uint32_t>(
+        processor, BASE_ADDRESS, {10, 99, 30, 99}
+    );
+}
+
+TEST(VectorMemoryTest, MaskedLoadUndoRedo)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    LoadVectorMemoryProgram(
+        processor, 32, 4, EncodeVle(0b110, 3, 10, 0)
+    );
+
+    WriteMemoryElements<uint32_t>(
+        processor, BASE_ADDRESS, {10, 20, 30, 40}
+    );
+
+    WriteVectorElements<uint32_t>(
+        processor.registers_, 3, {99, 99, 99, 99}
+    );
+
+    SetMask(processor.registers_, 0b00000101);
+
+    processor.Step();
+
+    ExpectVectorElements<uint32_t>(
+        processor.registers_, 3, {10, 99, 30, 99}
+    );
+
+    processor.Undo();
+
+    ExpectVectorElements<uint32_t>(
+        processor.registers_, 3, {99, 99, 99, 99}
+    );
+
+    processor.Redo();
+
+    ExpectVectorElements<uint32_t>(
+        processor.registers_, 3, {10, 99, 30, 99}
+    );
+}
+TEST(VectorMemoryTest, MaskAgnosticStoreDoesNotModifyInactiveMemory)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    LoadVectorMemoryProgram(
+        processor, 32, 4,
+        EncodeVse(0b110, 3, 10, 0),
+        false, true
+    );
+
+    WriteVectorElements<uint32_t>(
+        processor.registers_, 3, {10, 20, 30, 40}
+    );
+
+    WriteMemoryElements<uint32_t>(
+        processor, BASE_ADDRESS, {99, 99, 99, 99}
+    );
+
+    SetMask(processor.registers_, 0b00000101);
+
+    processor.Step();
+
+    ExpectMemoryElements<uint32_t>(
+        processor, BASE_ADDRESS, {10, 99, 30, 99}
     );
 }

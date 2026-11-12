@@ -15,8 +15,15 @@ namespace
 using Processor = Kites::RVSSProcessor;
 using RegisterFile = Kites::RegisterFile;
 
+void SetMask(RegisterFile &registers, uint8_t mask)
+{
+    registers.WriteVregElement<uint8_t>(0, 0, mask);
+}
 // Encode: vsetvli x0, x1, eSEW, m1, tu, mu
-uint32_t EncodeVsetvli(unsigned int sew_bits)
+uint32_t EncodeVsetvli(
+    unsigned int sew_bits,
+    bool tail_agnostic = false,
+    bool mask_agnostic = false)
 {
     uint32_t vsew = 0;
 
@@ -29,10 +36,9 @@ uint32_t EncodeVsetvli(unsigned int sew_bits)
     default: return 0;
     }
 
-    // uint32_t vtype = (1u << 6) | (vsew << 3);
-    // // Note: bit 6 = vta=1 would be tail agnostic.
-    // Use vta=0 and vma=0 for undisturbed behavior.
-    uint32_t vtype = vsew << 3;
+    uint32_t vtype = (vsew << 3) |
+                     (static_cast<uint32_t>(tail_agnostic) << 6) |
+                     (static_cast<uint32_t>(mask_agnostic) << 7);
 
     return (vtype << 20) |
            (1u << 15) |
@@ -45,16 +51,16 @@ uint32_t EncodeVectorVV(
     uint32_t funct6,
     uint32_t vd = 3,
     uint32_t vs2 = 1,
-    uint32_t vs1 = 2)
+    uint32_t vs1 = 2,
+    uint32_t vm = 1)
 {
     return (funct6 << 26) |
-           (1u << 25) | // vm = 1, unmasked
+           (vm << 25) |
            (vs2 << 20) |
            (vs1 << 15) |
            (vd << 7) |
            0x57u;
 }
-
 void LoadVectorProgram(
     Processor &processor,
     unsigned int sew_bits,
@@ -379,4 +385,169 @@ TEST(VectorArithmeticTest, RedoReappliesVectorDestination)
     ExpectElements<uint32_t>(
         processor.registers_, 3, {11, 22, 33, 44}
     );
+}
+TEST(VectorArithmeticTest, MaskedExecution)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    LoadVectorProgram(
+        processor, 32, 4,
+        EncodeVectorVV(0b000000, 3, 1, 2, 0));
+
+    WriteElements<uint32_t>(
+        processor.registers_, 1, {1, 2, 3, 4});
+
+    WriteElements<uint32_t>(
+        processor.registers_, 2, {10, 20, 30, 40});
+
+    WriteElements<uint32_t>(
+        processor.registers_, 3, {99, 99, 99, 99});
+
+    SetMask(processor.registers_, 0b00000101);
+
+    processor.Step();
+
+    ExpectElements<uint32_t>(
+        processor.registers_, 3, {11, 99, 33, 99});
+}
+TEST(VectorArithmeticTest, MaskAgnostic)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    Kites::AssembledProgram program;
+    program.text_buffer = {
+        EncodeVsetvli(32, false, true),
+        EncodeVectorVV(0b000000, 3, 1, 2, 0)
+    };
+
+    processor.LoadProgram(program);
+    processor.registers_.WriteGpr(1, 4);
+    processor.Step();
+
+    WriteElements<uint32_t>(
+        processor.registers_, 1, {1, 2, 3, 4});
+
+    WriteElements<uint32_t>(
+        processor.registers_, 2, {10, 20, 30, 40});
+
+    WriteElements<uint32_t>(
+        processor.registers_, 3, {99, 99, 99, 99});
+
+    SetMask(processor.registers_, 0b00000101);
+
+    processor.Step();
+
+    ExpectElements<uint32_t>(
+        processor.registers_, 3,
+        {11, UINT32_MAX, 33, UINT32_MAX});
+}
+TEST(VectorArithmeticTest, TailUndisturbed)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    LoadVectorProgram(
+        processor, 32, 2, EncodeVectorVV(0b000000));
+
+    WriteElements<uint32_t>(
+        processor.registers_, 1, {1, 2, 3, 4});
+
+    WriteElements<uint32_t>(
+        processor.registers_, 2, {10, 20, 30, 40});
+
+    WriteElements<uint32_t>(
+        processor.registers_, 3, {99, 99, 99, 99});
+
+    processor.Step();
+
+    ExpectElements<uint32_t>(
+        processor.registers_, 3, {11, 22, 99, 99});
+}
+TEST(VectorArithmeticTest, TailAgnostic)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    Kites::AssembledProgram program;
+    program.text_buffer = {
+        EncodeVsetvli(32, true, false),
+        EncodeVectorVV(0b000000)
+    };
+
+    processor.LoadProgram(program);
+    processor.registers_.WriteGpr(1, 2);
+    processor.Step();
+
+    WriteElements<uint32_t>(
+        processor.registers_, 1, {1, 2, 3, 4});
+
+    WriteElements<uint32_t>(
+        processor.registers_, 2, {10, 20, 30, 40});
+
+    WriteElements<uint32_t>(
+        processor.registers_, 3, {99, 99, 99, 99});
+
+    processor.Step();
+
+    ExpectElements<uint32_t>(
+        processor.registers_, 3,
+        {11, 22, UINT32_MAX, UINT32_MAX});
+}
+TEST(VectorArithmeticTest, MaskedExecutionRespectsVstart)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    LoadVectorProgram(
+        processor, 32, 4,
+        EncodeVectorVV(0b000000, 3, 1, 2, 0));
+
+    WriteElements<uint32_t>(
+        processor.registers_, 1, {1, 2, 3, 4});
+
+    WriteElements<uint32_t>(
+        processor.registers_, 2, {10, 20, 30, 40});
+
+    WriteElements<uint32_t>(
+        processor.registers_, 3, {99, 99, 99, 99});
+
+    SetMask(processor.registers_, 0b00000101);
+
+    processor.registers_.WriteCsr(
+        RegisterFile::CSR_VSTART, 1);
+
+    processor.Step();
+
+    ExpectElements<uint32_t>(
+        processor.registers_, 3, {99, 99, 33, 99});
+
+    EXPECT_EQ(
+        processor.registers_.ReadCsr(RegisterFile::CSR_VSTART),
+        0);
+}
+TEST(VectorArithmeticTest, SupportsDestinationMaskOverlap)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    LoadVectorProgram(
+        processor, 32, 4,
+        EncodeVectorVV(0b000000, 0, 1, 2, 0));
+
+    WriteElements<uint32_t>(
+        processor.registers_, 1, {1, 2, 3, 4});
+
+    WriteElements<uint32_t>(
+        processor.registers_, 2, {10, 20, 30, 40});
+
+    // Mask bits 0 and 2 are active.
+    SetMask(processor.registers_, 0b00000101);
+
+    processor.Step();
+
+    ExpectElements<uint32_t>(
+        processor.registers_, 0,
+        {11, 0, 33, 0});
 }
