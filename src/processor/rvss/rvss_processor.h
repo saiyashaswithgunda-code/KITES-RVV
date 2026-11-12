@@ -50,6 +50,11 @@ class RVSSProcessor : public ProcessorBase
     uint8_t vector_rd_{};
     uint64_t vector_new_vl_{};
     uint64_t vector_new_vtype_{};
+    // Vector arithmetic intermediate variables
+    uint8_t vector_vd_{};
+    RegisterFile::VectorRegister vector_old_value_{};
+    RegisterFile::VectorRegister vector_new_value_{};
+    bool vector_arithmetic_pending_{};
 
     std::stack<StepDelta> undo_stack_;
     std::stack<StepDelta> redo_stack_;
@@ -65,6 +70,7 @@ class RVSSProcessor : public ProcessorBase
     void ExecuteDouble();
     void ExecuteCsr();
     void ExecuteVsetvli();
+    void ExecuteVectorArithmetic();
     void HandleSyscall();
 
     void WriteMemory();
@@ -76,6 +82,7 @@ class RVSSProcessor : public ProcessorBase
     void WriteBackDouble();
     void WriteBackCsr();
     void WriteBackVsetvli();
+    void WriteBackVectorArithmetic();
 
     RVSSProcessor();
     ~RVSSProcessor();

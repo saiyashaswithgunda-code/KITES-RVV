@@ -187,6 +187,12 @@ void RVSSProcessor::Execute()
         ExecuteVsetvli();
         return;
     }
+    // Handle vector arithmetic instructions.
+    if (opcode == 0x57 && funct3 == 0b000)
+    {
+        ExecuteVectorArithmetic();
+        return;
+    }
 
     if (opcode == 0b1110011 && funct3 == 0b000)
     {
@@ -456,6 +462,139 @@ void RVSSProcessor::ExecuteVsetvli()
         vector_new_vtype_ = vtype_imm;
         vector_new_vl_ = CalculateVectorLength(avl, config.vlmax);
     }
+}
+void RVSSProcessor::ExecuteVectorArithmetic()
+{
+    // Clear the pending flag before processing this instruction.
+    vector_arithmetic_pending_ = false;
+
+    uint8_t funct6 = (current_instruction_ >> 26) & 0x3F;
+    uint8_t vm = (current_instruction_ >> 25) & 0x01;
+
+    vector_vd_ = (current_instruction_ >> 7) & 0x1F;
+    uint8_t vs1 = (current_instruction_ >> 15) & 0x1F;
+    uint8_t vs2 = (current_instruction_ >> 20) & 0x1F;
+
+    // This implementation currently supports unmasked operations only.
+    if (vm != 1)
+        return;
+
+    // Identify the supported operation.
+    switch (funct6)
+    {
+    case 0b000000: // vadd.vv
+    case 0b000010: // vsub.vv
+    case 0b001001: // vand.vv
+    case 0b001010: // vor.vv
+    case 0b001011: // vxor.vv
+        break;
+
+    default:
+        return;
+    }
+
+    // Read the current vector configuration.
+    uint64_t vtype = registers_.ReadCsr(RegisterFile::CSR_VTYPE);
+    uint64_t vl = registers_.ReadCsr(RegisterFile::CSR_VL);
+    uint64_t vstart = registers_.ReadCsr(RegisterFile::CSR_VSTART);
+
+    VectorConfig config = DecodeVectorConfig(vtype);
+
+    if (config.vill || config.sew_bits == 0)
+        return;
+
+    // Save the old destination and copy it into the result.
+    // Inactive elements will remain unchanged.
+    vector_old_value_ = registers_.ReadVreg(vector_vd_);
+    vector_new_value_ = vector_old_value_;
+
+    // Read source registers before modifying anything.
+    RegisterFile::VectorRegister source1 = registers_.ReadVreg(vs1);
+    RegisterFile::VectorRegister source2 = registers_.ReadVreg(vs2);
+
+    unsigned int element_bytes = config.sew_bits / 8;
+
+    // Prevent accessing elements beyond the physical vector register.
+    unsigned int max_elements = RegisterFile::VLEN_BYTES / element_bytes;
+
+    // Read one little-endian element from a vector register.
+    auto read_element = [](const RegisterFile::VectorRegister &reg,
+                           unsigned int index,
+                           unsigned int bytes) -> uint64_t
+    {
+        uint64_t value = 0;
+
+        for (unsigned int b = 0; b < bytes; b++)
+        {
+            value |= static_cast<uint64_t>(
+                         reg[index * bytes + b])
+                     << (8 * b);
+        }
+
+        return value;
+    };
+
+    // Write one little-endian element into a vector register.
+    auto write_element = [](RegisterFile::VectorRegister &reg,
+                            unsigned int index,
+                            unsigned int bytes,
+                            uint64_t value)
+    {
+        for (unsigned int b = 0; b < bytes; b++)
+        {
+            reg[index * bytes + b] =
+                static_cast<uint8_t>(value >> (8 * b));
+        }
+    };
+
+    // Create a mask corresponding to the configured SEW.
+    uint64_t element_mask =
+        (config.sew_bits == 64)
+            ? UINT64_MAX
+            : ((1ULL << config.sew_bits) - 1);
+
+    // Execute the operation element by element.
+    for (uint64_t i = vstart;
+         i < vl && i < max_elements;
+         i++)
+    {
+        uint64_t a = read_element(source2, i, element_bytes);
+        uint64_t b = read_element(source1, i, element_bytes);
+
+        uint64_t result = 0;
+
+        switch (funct6)
+        {
+        case 0b000000: // vadd.vv
+            result = a + b;
+            break;
+
+        case 0b000010: // vsub.vv
+            result = a - b;
+            break;
+
+        case 0b001001: // vand.vv
+            result = a & b;
+            break;
+
+        case 0b001010: // vor.vv
+            result = a | b;
+            break;
+
+        case 0b001011: // vxor.vv
+            result = a ^ b;
+            break;
+        }
+
+        result &= element_mask;
+
+        write_element(vector_new_value_,
+                      static_cast<unsigned int>(i),
+                      element_bytes,
+                      result);
+    }
+
+    vector_arithmetic_pending_ = true;
 }
 // TODO: implement writeback for syscalls
 void RVSSProcessor::HandleSyscall()
@@ -886,6 +1025,12 @@ void RVSSProcessor::WriteBack()
         WriteBackVsetvli();
         return;
     }
+    // Handle vector arithmetic writeback.
+    if (opcode == 0x57 && funct3 == 0b000)
+    {
+        WriteBackVectorArithmetic();
+        return;
+    }
     if (opcode == 0b1110011 && funct3 == 0b000)
     {
         return;
@@ -1174,6 +1319,35 @@ void RVSSProcessor::WriteBackVsetvli()
         }
     }
 }
+void RVSSProcessor::WriteBackVectorArithmetic()
+{
+    if (!vector_arithmetic_pending_)
+        return;
+
+    // Write the calculated result to the destination register.
+    registers_.WriteVreg(vector_vd_, vector_new_value_);
+
+    // Record the change for Undo/Redo.
+    if (vector_old_value_ != vector_new_value_)
+    {
+        current_delta_.vector_register_changes.push_back(
+            {vector_vd_, vector_old_value_, vector_new_value_});
+    }
+
+    // A successfully completed vector instruction resets vstart.
+    uint64_t old_vstart =
+        registers_.ReadCsr(RegisterFile::CSR_VSTART);
+
+    if (old_vstart != 0)
+    {
+        registers_.WriteCsr(RegisterFile::CSR_VSTART, 0);
+
+        current_delta_.register_changes.push_back(
+            {RegisterFile::CSR_VSTART, 1, old_vstart, 0});
+    }
+
+    vector_arithmetic_pending_ = false;
+}
 
 void RVSSProcessor::DebugRun()
 {
@@ -1339,7 +1513,10 @@ void RVSSProcessor::Undo()
             break;
         }
     }
-
+    for (const auto &change : last.vector_register_changes)
+    {
+        registers_.WriteVreg(change.reg_index, change.old_value);
+    }
     for (const auto &change : last.memory_changes)
     {
         for (size_t i = 0; i < change.old_bytes_vec.size(); ++i)
@@ -1411,7 +1588,10 @@ void RVSSProcessor::Redo()
             break;
         }
     }
-
+    for (const auto &change : next.vector_register_changes)
+    {
+        registers_.WriteVreg(change.reg_index, change.new_value);
+    }
     for (const auto &change : next.memory_changes)
     {
         for (size_t i = 0; i < change.new_bytes_vec.size(); ++i)
@@ -1459,5 +1639,12 @@ void RVSSProcessor::Reset()
     current_delta_.new_pc = 0;
     undo_stack_ = std::stack<StepDelta>();
     redo_stack_ = std::stack<StepDelta>();
+
+    vector_arithmetic_pending_ = false;
+    vector_vd_ = 0;
+    vector_old_value_.fill(0);
+    vector_new_value_.fill(0);
+
+    current_delta_.vector_register_changes.clear();
 }
 }//namespaace Kites

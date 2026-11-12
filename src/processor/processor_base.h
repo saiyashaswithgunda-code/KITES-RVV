@@ -52,7 +52,12 @@ struct RegisterChange
     uint64_t old_value;
     uint64_t new_value;
 };
-
+struct VectorRegisterChange
+{
+    unsigned int reg_index;
+    RegisterFile::VectorRegister old_value;
+    RegisterFile::VectorRegister new_value;
+};
 struct MemoryChange
 {
     uint64_t address;
@@ -74,6 +79,7 @@ struct StepDelta
     unsigned int new_branch_mispredictions{};
     std::vector<RegisterChange> register_changes{};
     std::vector<MemoryChange> memory_changes{};
+    std::vector<VectorRegisterChange> vector_register_changes{};
 };
 
 /**
