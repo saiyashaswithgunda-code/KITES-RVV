@@ -29,6 +29,14 @@ enum class Instruction
     kvand_vv,
     kvor_vv,
     kvxor_vv,
+    kvle8_v,
+    kvle16_v,
+    kvle32_v,
+    kvle64_v,
+    kvse8_v,
+    kvse16_v,
+    kvse32_v,
+    kvse64_v,
 
 
     kadd,
@@ -420,6 +428,7 @@ struct FDSTypeInstructionEncoding
  */
 enum class SyntaxType
 {
+    O_VREG_C_LP_GPR_RP, ///< Opcode vector-register, (general-register)
     O_GPR_C_GPR_C_VTYPE, ///< Opcode general-register , general-register , vtypeimmediate
     O_VREG_C_VREG_C_VREG, ///< Opcode vector-register, vector-register, vector-register
 

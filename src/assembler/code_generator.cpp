@@ -23,7 +23,17 @@ static bool isVectorVVInstruction(const std::string &opcode)
            opcode == "vor.vv"  ||
            opcode == "vxor.vv";
 }
-
+bool isVectorMemoryInstruction(const std::string &opcode)
+{
+    return opcode == "vle8.v"  ||
+           opcode == "vle16.v" ||
+           opcode == "vle32.v" ||
+           opcode == "vle64.v" ||
+           opcode == "vse8.v"  ||
+           opcode == "vse16.v" ||
+           opcode == "vse32.v" ||
+           opcode == "vse64.v";
+}
 std::vector<std::string>
 printIntermediateCode(const std::vector<std::pair<ICUnit, bool>> &IntermediateCode)
 {
@@ -32,7 +42,12 @@ printIntermediateCode(const std::vector<std::pair<ICUnit, bool>> &IntermediateCo
     {
         const ICUnit &block = pair.first;
         std::string code;
-        if (isVectorVVInstruction(block.getOpcode()))
+        if (isVectorMemoryInstruction(block.getOpcode()))
+        {
+            code = block.getOpcode() + " " + block.getRd() +
+                ", (" + block.getRs1() + ")";
+        }
+        else if (isVectorVVInstruction(block.getOpcode()))
         {
             code = block.getOpcode() + " " + block.getRd() + ", " +
                 block.getRs2() + ", " + block.getRs1();
@@ -116,6 +131,44 @@ uint32_t generateVectorVVTypeMachineCode(const ICUnit &block)
     machineCode |= (vs1 << 15);
     machineCode |= (funct3 << 12);
     machineCode |= (vd << 7);
+    machineCode |= opcodeBits;
+
+    return machineCode;
+}
+uint32_t generateVectorMemoryTypeMachineCode(const ICUnit &block)
+{
+    const std::string opcode = block.getOpcode();
+
+    uint32_t funct3;
+    uint32_t opcodeBits;
+
+    if (opcode == "vle8.v" || opcode == "vse8.v")
+        funct3 = 0b000;
+    else if (opcode == "vle16.v" || opcode == "vse16.v")
+        funct3 = 0b101;
+    else if (opcode == "vle32.v" || opcode == "vse32.v")
+        funct3 = 0b110;
+    else if (opcode == "vle64.v" || opcode == "vse64.v")
+        funct3 = 0b111;
+    else
+        throw std::runtime_error("Unsupported vector memory instruction: " + opcode);
+
+    if (opcode.substr(0, 3) == "vle")
+        opcodeBits = 0b0000111; // Vector load
+    else
+        opcodeBits = 0b0100111; // Vector store
+
+    const uint32_t vectorReg = extractRegisterIndex(block.getRd());
+    const uint32_t rs1 = extractRegisterIndex(block.getRs1());
+
+    constexpr uint32_t vm = 1; // Unmasked
+
+    uint32_t machineCode = 0;
+
+    machineCode |= (vm << 25);
+    machineCode |= (rs1 << 15);
+    machineCode |= (funct3 << 12);
+    machineCode |= (vectorReg << 7);
     machineCode |= opcodeBits;
 
     return machineCode;
@@ -420,7 +473,11 @@ generateMachineCode(const std::vector<std::pair<ICUnit, bool>> &IntermediateCode
     {
         const ICUnit &block = pair.first;
         uint32_t code;
-        if (isVectorVVInstruction(block.getOpcode()))
+        if (isVectorMemoryInstruction(block.getOpcode()))
+        {
+            code = generateVectorMemoryTypeMachineCode(block);
+        }
+        else if (isVectorVVInstruction(block.getOpcode()))
         {
             code = generateVectorVVTypeMachineCode(block);
         }

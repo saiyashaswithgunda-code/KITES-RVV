@@ -348,6 +348,10 @@ void Parser::parseTextDirective()
                 {
                     valid_syntax = parse_vector_vv();
                     break;
+                }case instruction_set::SyntaxType::O_VREG_C_LP_GPR_RP:
+                {
+                    valid_syntax = parse_vector_memory();
+                    break;
                 }
                 case instruction_set::SyntaxType::O_GPR_C_GPR_C_GPR:
                 {

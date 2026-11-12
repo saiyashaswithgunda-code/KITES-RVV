@@ -684,5 +684,42 @@ bool Parser::parse_vector_vv()
 
     return true;
 }
+bool Parser::parse_vector_memory()
+{
+    const unsigned int line = currentToken().line_number;
+
+    // Validate: instruction vd/vs3, (rs1)
+    if (peekToken(1).line_number != line ||
+        peekToken(1).type != TokenType::VEC_REGISTER ||
+        peekToken(2).type != TokenType::COMMA ||
+        peekToken(3).type != TokenType::LPAREN ||
+        peekToken(4).line_number != line ||
+        peekToken(4).type != TokenType::GP_REGISTER ||
+        peekToken(5).type != TokenType::RPAREN ||
+        (peekToken(6).type != TokenType::EOF_ &&
+         peekToken(6).line_number == line))
+    {
+        return false;
+    }
+
+    ICUnit block;
+    block.setOpcode(currentToken().value);
+    block.setLineNumber(line);
+    block.setInstructionIndex(instruction_index_);
+
+    // The vector register is vd for loads and vs3 for stores.
+    block.setRd(peekToken(1).value);
+
+    // Convert the base register alias into its canonical name.
+    block.setRs1(reg_alias_to_name.at(peekToken(4).value));
+
+    skipCurrentLine();
+
+    intermediate_code_.emplace_back(block, true);
+    instruction_number_line_number_mapping_[instruction_index_] = line;
+    instruction_index_++;
+
+    return true;
+}
 
 }// namespace Kites

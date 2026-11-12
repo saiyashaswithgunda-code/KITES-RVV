@@ -25,6 +25,15 @@ std::unordered_map<Instruction, InstructionEncoding> instruction_encoding_map = 
     {Instruction::kvand_vv, {0b1010111, -1, 0b000, -1, 0b001001, -1}},
     {Instruction::kvor_vv,  {0b1010111, -1, 0b000, -1, 0b001010, -1}},
     {Instruction::kvxor_vv, {0b1010111, -1, 0b000, -1, 0b001011, -1}},
+    {Instruction::kvle8_v,  {0b0000111, -1, 0b000, -1, -1, -1}},
+    {Instruction::kvle16_v, {0b0000111, -1, 0b101, -1, -1, -1}},
+    {Instruction::kvle32_v, {0b0000111, -1, 0b110, -1, -1, -1}},
+    {Instruction::kvle64_v, {0b0000111, -1, 0b111, -1, -1, -1}},
+
+    {Instruction::kvse8_v,  {0b0100111, -1, 0b000, -1, -1, -1}},
+    {Instruction::kvse16_v, {0b0100111, -1, 0b101, -1, -1, -1}},
+    {Instruction::kvse32_v, {0b0100111, -1, 0b110, -1, -1, -1}},
+    {Instruction::kvse64_v, {0b0100111, -1, 0b111, -1, -1, -1}},
     
 
     {Instruction::kadd, {0b0110011, -1, 0b000, -1, -1, 0b0000000}},
@@ -203,6 +212,14 @@ std::unordered_map<std::string, Instruction> instruction_string_map = {
     {"vand.vv", Instruction::kvand_vv},
     {"vor.vv", Instruction::kvor_vv},
     {"vxor.vv", Instruction::kvxor_vv},
+    {"vle8.v", Instruction::kvle8_v},
+    {"vle16.v", Instruction::kvle16_v},
+    {"vle32.v", Instruction::kvle32_v},
+    {"vle64.v", Instruction::kvle64_v},
+    {"vse8.v", Instruction::kvse8_v},
+    {"vse16.v", Instruction::kvse16_v},
+    {"vse32.v", Instruction::kvse32_v},
+    {"vse64.v", Instruction::kvse64_v},
 
     {"add", Instruction::kadd},
     {"sub", Instruction::ksub},
@@ -368,10 +385,9 @@ std::unordered_map<std::string, Instruction> instruction_string_map = {
 static const std::unordered_set<std::string> valid_instructions = {
 
     "vsetvli","vadd.vv",
-    "vsub.vv",
-    "vand.vv",
-    "vor.vv",
-    "vxor.vv",
+    "vsub.vv","vand.vv","vor.vv","vxor.vv",
+    "vle8.v", "vle16.v", "vle32.v", "vle64.v",
+    "vse8.v", "vse16.v", "vse32.v", "vse64.v",
 
     "add", "sub", "and", "or", "xor", "sll", "srl", "sra", "slt", "sltu", "addw", "subw", "sllw",
     "srlw", "sraw", "addi", "xori", "ori", "andi", "slli", "srli", "srai", "slti", "sltiu", "addiw",
@@ -786,11 +802,22 @@ std::unordered_map<std::string, FDSTypeInstructionEncoding> F_D_S_type_instructi
 std::unordered_map<std::string, std::vector<SyntaxType>> instruction_syntax_map = {
 
     {"vsetvli", {SyntaxType::O_GPR_C_GPR_C_VTYPE}},
+    
     {"vadd.vv", {SyntaxType::O_VREG_C_VREG_C_VREG}},
     {"vsub.vv", {SyntaxType::O_VREG_C_VREG_C_VREG}},
     {"vand.vv", {SyntaxType::O_VREG_C_VREG_C_VREG}},
     {"vor.vv", {SyntaxType::O_VREG_C_VREG_C_VREG}},
     {"vxor.vv", {SyntaxType::O_VREG_C_VREG_C_VREG}},
+
+    {"vle8.v",  {SyntaxType::O_VREG_C_LP_GPR_RP}},
+    {"vle16.v", {SyntaxType::O_VREG_C_LP_GPR_RP}},
+    {"vle32.v", {SyntaxType::O_VREG_C_LP_GPR_RP}},
+    {"vle64.v", {SyntaxType::O_VREG_C_LP_GPR_RP}},
+    {"vse8.v",  {SyntaxType::O_VREG_C_LP_GPR_RP}},
+    {"vse16.v", {SyntaxType::O_VREG_C_LP_GPR_RP}},
+    {"vse32.v", {SyntaxType::O_VREG_C_LP_GPR_RP}},
+    {"vse64.v", {SyntaxType::O_VREG_C_LP_GPR_RP}},
+    
 
     {"add", {SyntaxType::O_GPR_C_GPR_C_GPR}},
     {"sub", {SyntaxType::O_GPR_C_GPR_C_GPR}},

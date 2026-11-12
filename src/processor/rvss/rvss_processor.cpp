@@ -193,6 +193,14 @@ void RVSSProcessor::Execute()
         ExecuteVectorArithmetic();
         return;
     }
+    // Handle vector memory instructions.
+    if ((opcode == 0x07 || opcode == 0x27) &&
+        (funct3 == 0b000 || funct3 == 0b101 ||
+        funct3 == 0b110 || funct3 == 0b111))
+    {
+        ExecuteVectorMemory();
+        return;
+    }
 
     if (opcode == 0b1110011 && funct3 == 0b000)
     {
@@ -596,6 +604,97 @@ void RVSSProcessor::ExecuteVectorArithmetic()
 
     vector_arithmetic_pending_ = true;
 }
+void RVSSProcessor::ExecuteVectorMemory()
+{
+    vector_mem_pending_ = false;
+
+    const uint32_t instruction = current_instruction_;
+
+    const uint8_t opcode = instruction & 0x7F;
+    const uint8_t funct3 = (instruction >> 12) & 0x7;
+
+    // We support only unmasked, unit-stride, single-field operations.
+    const uint8_t nf = (instruction >> 29) & 0x7;
+    const uint8_t mew = (instruction >> 28) & 0x1;
+    const uint8_t mop = (instruction >> 26) & 0x3;
+    const uint8_t vm = (instruction >> 25) & 0x1;
+    const uint8_t lumop_sumop = (instruction >> 20) & 0x1F;
+
+    if (nf != 0 || mew != 0 || mop != 0 ||
+        vm != 1 || lumop_sumop != 0)
+    {
+        return;
+    }
+
+    // Determine element width from the instruction.
+    switch (funct3)
+    {
+    case 0b000:
+        vector_mem_element_bytes_ = 1;
+        break;
+
+    case 0b101:
+        vector_mem_element_bytes_ = 2;
+        break;
+
+    case 0b110:
+        vector_mem_element_bytes_ = 4;
+        break;
+
+    case 0b111:
+        vector_mem_element_bytes_ = 8;
+        break;
+
+    default:
+        return;
+    }
+
+    // Require the memory element width to match the configured SEW.
+    const uint64_t vtype =
+        registers_.ReadCsr(RegisterFile::CSR_VTYPE);
+
+    const VectorConfig config = DecodeVectorConfig(vtype);
+
+    if (config.vill ||
+        config.sew_bits != vector_mem_element_bytes_ * 8)
+    {
+        return;
+    }
+
+    const uint64_t vl =
+        registers_.ReadCsr(RegisterFile::CSR_VL);
+
+    const uint64_t vstart =
+        registers_.ReadCsr(RegisterFile::CSR_VSTART);
+
+    const uint64_t max_elements =
+        RegisterFile::VLEN_BYTES / vector_mem_element_bytes_;
+
+    if (vl > max_elements || vstart > vl)
+    {
+        return;
+    }
+
+    vector_mem_load_ = (opcode == 0x07);
+
+    // Bits 11:7 contain vd for loads and vs3 for stores.
+    vector_mem_reg_ = (instruction >> 7) & 0x1F;
+
+    // Bits 19:15 contain the base address register.
+    const uint8_t rs1 = (instruction >> 15) & 0x1F;
+
+    vector_mem_base_ = registers_.ReadGpr(rs1);
+
+    // Preserve the original vector register.
+    vector_mem_old_value_ =
+        registers_.ReadVreg(vector_mem_reg_);
+
+    // Loads will modify this copy; stores use the original data.
+    vector_mem_new_value_ = vector_mem_old_value_;
+
+    vector_mem_pending_ = true;
+}
+
 // TODO: implement writeback for syscalls
 void RVSSProcessor::HandleSyscall()
 {
@@ -817,7 +916,14 @@ void RVSSProcessor::WriteMemory()
     {
         return;
     }
-
+    // Handle vector memory instructions.
+    if ((opcode == 0x07 || opcode == 0x27) &&
+    (funct3 == 0b000 || funct3 == 0b101 ||
+     funct3 == 0b110 || funct3 == 0b111))
+    {
+        WriteMemoryVector();
+        return;
+    }
     if (instruction_set::isFInstruction(current_instruction_))
     { // RV64 F
         WriteMemoryFloat();
@@ -1010,7 +1116,69 @@ void RVSSProcessor::WriteMemoryDouble()
         current_delta_.memory_changes.push_back({addr, old_bytes_vec, new_bytes_vec});
     }
 }
+void RVSSProcessor::WriteMemoryVector()
+{
+    if (!vector_mem_pending_)
+        return;
 
+    const uint64_t vl =
+        registers_.ReadCsr(RegisterFile::CSR_VL);
+
+    const uint64_t vstart =
+        registers_.ReadCsr(RegisterFile::CSR_VSTART);
+
+    const size_t element_bytes = vector_mem_element_bytes_;
+
+    const size_t max_elements =
+        RegisterFile::VLEN_BYTES / element_bytes;
+
+    for (uint64_t i = vstart; i < vl && i < max_elements; ++i)
+    {
+        const uint64_t address =
+            vector_mem_base_ + i * element_bytes;
+
+        const size_t offset = i * element_bytes;
+
+        if (vector_mem_load_)
+        {
+            // Read the active element into the pending destination.
+            for (size_t b = 0; b < element_bytes; ++b)
+            {
+                vector_mem_new_value_[offset + b] =
+                    memory_controller_.readByte(address + b);
+            }
+        }
+        else
+        {
+            // Record old memory contents for Undo.
+            std::vector<uint8_t> old_bytes;
+            std::vector<uint8_t> new_bytes;
+
+            for (size_t b = 0; b < element_bytes; ++b)
+            {
+                old_bytes.push_back(
+                    memory_controller_.peekByte(address + b));
+
+                new_bytes.push_back(
+                    vector_mem_old_value_[offset + b]);
+            }
+
+            // Write the vector element to memory.
+            for (size_t b = 0; b < element_bytes; ++b)
+            {
+                memory_controller_.writeByte(
+                    address + b,
+                    new_bytes[b]);
+            }
+
+            if (old_bytes != new_bytes)
+            {
+                current_delta_.memory_changes.push_back(
+                    {address, old_bytes, new_bytes});
+            }
+        }
+    }
+}
 void RVSSProcessor::WriteBack()
 {
     uint8_t opcode = current_instruction_ & 0b1111111;
@@ -1029,6 +1197,14 @@ void RVSSProcessor::WriteBack()
     if (opcode == 0x57 && funct3 == 0b000)
     {
         WriteBackVectorArithmetic();
+        return;
+    }
+    // Handle vector memory instructions.
+    if ((opcode == 0x07 || opcode == 0x27) &&
+    (funct3 == 0b000 || funct3 == 0b101 ||
+     funct3 == 0b110 || funct3 == 0b111))
+    {
+        WriteBackVectorMemory();
         return;
     }
     if (opcode == 0b1110011 && funct3 == 0b000)
@@ -1348,6 +1524,48 @@ void RVSSProcessor::WriteBackVectorArithmetic()
 
     vector_arithmetic_pending_ = false;
 }
+void RVSSProcessor::WriteBackVectorMemory()
+{
+    if (!vector_mem_pending_)
+        return;
+
+    // Loads update the destination vector register.
+    if (vector_mem_load_)
+    {
+        registers_.WriteVreg(
+            vector_mem_reg_,
+            vector_mem_new_value_);
+
+        if (vector_mem_old_value_ != vector_mem_new_value_)
+        {
+            current_delta_.vector_register_changes.push_back(
+                {
+                    vector_mem_reg_,
+                    vector_mem_old_value_,
+                    vector_mem_new_value_
+                });
+        }
+    }
+
+    // A successfully completed vector instruction resets vstart.
+    const uint64_t old_vstart =
+        registers_.ReadCsr(RegisterFile::CSR_VSTART);
+
+    if (old_vstart != 0)
+    {
+        registers_.WriteCsr(RegisterFile::CSR_VSTART, 0);
+
+        current_delta_.register_changes.push_back(
+            {
+                RegisterFile::CSR_VSTART,
+                1,
+                old_vstart,
+                0
+            });
+    }
+
+    vector_mem_pending_ = false;
+}
 
 void RVSSProcessor::DebugRun()
 {
@@ -1644,6 +1862,14 @@ void RVSSProcessor::Reset()
     vector_vd_ = 0;
     vector_old_value_.fill(0);
     vector_new_value_.fill(0);
+
+    vector_mem_reg_ = 0;
+    vector_mem_base_ = 0;
+    vector_mem_element_bytes_ = 0;
+    vector_mem_load_ = false;
+    vector_mem_pending_ = false;
+    vector_mem_old_value_.fill(0);
+    vector_mem_new_value_.fill(0);
 
     current_delta_.vector_register_changes.clear();
 }

@@ -55,6 +55,19 @@ class RVSSProcessor : public ProcessorBase
     RegisterFile::VectorRegister vector_old_value_{};
     RegisterFile::VectorRegister vector_new_value_{};
     bool vector_arithmetic_pending_{};
+    // Vector memory intermediate variables
+    uint8_t vector_mem_reg_{};
+    uint64_t vector_mem_base_{};
+    uint8_t vector_mem_element_bytes_{};
+    bool vector_mem_load_{};
+    bool vector_mem_pending_{};
+
+    RegisterFile::VectorRegister vector_mem_old_value_{};
+    RegisterFile::VectorRegister vector_mem_new_value_{};
+
+    void ExecuteVectorMemory();
+    void WriteMemoryVector();
+    void WriteBackVectorMemory();
 
     std::stack<StepDelta> undo_stack_;
     std::stack<StepDelta> redo_stack_;

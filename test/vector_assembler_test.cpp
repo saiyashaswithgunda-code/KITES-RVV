@@ -43,7 +43,22 @@ uint32_t assembleVectorVV(const std::string &source)
 
     return program.text_buffer[0];
 }
+uint32_t assembleVectorMemory(const std::string &source)
+{
+    Kites::setupVmStateDirectory();
 
+    std::istringstream stream(source);
+    Kites::AssembledProgram program = Kites::assemble(stream);
+
+    EXPECT_EQ(program.text_buffer.size(), 1u);
+
+    if (program.text_buffer.empty())
+    {
+        return 0;
+    }
+
+    return program.text_buffer[0];
+}
 } // namespace
 
 TEST(VectorAssemblerTest, EncodesVsetvliE32Correctly)
@@ -140,5 +155,59 @@ TEST(VectorAssemblerTest, EncodesVxorVVCorrectly)
     EXPECT_EQ(
         assembleVectorVV("vxor.vv v1, v2, v3\n"),
         0x2E2180D7u
+    );
+}
+TEST(VectorAssemblerTest, EncodesAllVectorMemoryInstructions)
+{
+    struct TestCase
+    {
+        const char *instruction;
+        uint32_t expected;
+    };
+
+    const TestCase cases[] = {
+        {"vle8.v v3, (x10)",  0x02050187u},
+        {"vle16.v v3, (x10)", 0x02055187u},
+        {"vle32.v v3, (x10)", 0x02056187u},
+        {"vle64.v v3, (x10)", 0x02057187u},
+
+        {"vse8.v v3, (x10)",  0x020501A7u},
+        {"vse16.v v3, (x10)", 0x020551A7u},
+        {"vse32.v v3, (x10)", 0x020561A7u},
+        {"vse64.v v3, (x10)", 0x020571A7u}
+    };
+
+    for (const auto &testCase : cases)
+    {
+        SCOPED_TRACE(testCase.instruction);
+
+        std::string source =
+            std::string(testCase.instruction) + "\n";
+
+        EXPECT_EQ(
+            assembleVectorMemory(source),
+            testCase.expected
+        );
+    }
+}
+
+TEST(VectorAssemblerTest, EncodesVectorMemoryRegistersCorrectly)
+{
+    // vle8.v v17, (x5)
+    //
+    // vm  = 1
+    // rs1 = x5
+    // vd  = v17
+    // funct3 = 000
+    // opcode = 0000111
+
+    EXPECT_EQ(
+        assembleVectorMemory("vle8.v v17, (x5)\n"),
+        0x02028887u
+    );
+
+    EXPECT_EQ(
+        assembleVectorMemory("vse8.v v17, (x5)\n"),
+        0x020288A7u
     );
 }
