@@ -70,6 +70,16 @@ class RVSSProcessor : public ProcessorBase
     RegisterFile::VectorRegister vector_mem_old_value_{};
     RegisterFile::VectorRegister vector_mem_new_value_{};
 
+    // Vector reduction intermediate variables
+    bool vector_reduction_pending_{};
+    uint8_t vector_reduction_vd_{};
+
+    RegisterFile::VectorRegister vector_reduction_old_value_{};
+    RegisterFile::VectorRegister vector_reduction_new_value_{};
+
+    void ExecuteVectorReduction();
+    void WriteBackVectorReduction();
+
     void ExecuteVectorMemory();
     void WriteMemoryVector();
     void WriteBackVectorMemory();

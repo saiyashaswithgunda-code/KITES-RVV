@@ -37,7 +37,7 @@ enum class Instruction
     kvse16_v,
     kvse32_v,
     kvse64_v,
-
+    kvredsum_vs,
 
     kadd,
     ksub,

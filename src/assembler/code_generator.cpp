@@ -34,6 +34,10 @@ bool isVectorMemoryInstruction(const std::string &opcode)
            opcode == "vse32.v" ||
            opcode == "vse64.v";
 }
+static bool isVectorReductionInstruction(const std::string &opcode)
+{
+    return opcode == "vredsum.vs";
+}
 std::vector<std::string>
 printIntermediateCode(const std::vector<std::pair<ICUnit, bool>> &IntermediateCode)
 {
@@ -48,6 +52,11 @@ printIntermediateCode(const std::vector<std::pair<ICUnit, bool>> &IntermediateCo
                 ", (" + block.getRs1() + ")";
         }
         else if (isVectorVVInstruction(block.getOpcode()))
+        {
+            code = block.getOpcode() + " " + block.getRd() + ", " +
+                block.getRs2() + ", " + block.getRs1();
+        }
+        else if (isVectorReductionInstruction(block.getOpcode()))
         {
             code = block.getOpcode() + " " + block.getRd() + ", " +
                 block.getRs2() + ", " + block.getRs1();
@@ -169,6 +178,29 @@ uint32_t generateVectorMemoryTypeMachineCode(const ICUnit &block)
     machineCode |= (rs1 << 15);
     machineCode |= (funct3 << 12);
     machineCode |= (vectorReg << 7);
+    machineCode |= opcodeBits;
+
+    return machineCode;
+}
+uint32_t generateVectorReductionMachineCode(const ICUnit &block)
+{
+    const uint32_t vd  = extractRegisterIndex(block.getRd());
+    const uint32_t vs1 = extractRegisterIndex(block.getRs1());
+    const uint32_t vs2 = extractRegisterIndex(block.getRs2());
+
+    constexpr uint32_t funct6 = 0b000000;
+    constexpr uint32_t vm = 1;
+    constexpr uint32_t funct3 = 0b010;
+    constexpr uint32_t opcodeBits = 0b1010111;
+
+    uint32_t machineCode = 0;
+
+    machineCode |= (funct6 << 26);
+    machineCode |= (vm << 25);
+    machineCode |= (vs2 << 20);
+    machineCode |= (vs1 << 15);
+    machineCode |= (funct3 << 12);
+    machineCode |= (vd << 7);
     machineCode |= opcodeBits;
 
     return machineCode;
@@ -480,6 +512,10 @@ generateMachineCode(const std::vector<std::pair<ICUnit, bool>> &IntermediateCode
         else if (isVectorVVInstruction(block.getOpcode()))
         {
             code = generateVectorVVTypeMachineCode(block);
+        }
+        else if (isVectorReductionInstruction(block.getOpcode()))
+        {
+             code = generateVectorReductionMachineCode(block);
         }
         else if (instruction_set::isValidRTypeInstruction(block.getOpcode()))
         {

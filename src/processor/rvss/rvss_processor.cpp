@@ -201,6 +201,12 @@ void RVSSProcessor::Execute()
         ExecuteVectorMemory();
         return;
     }
+    // Handle vector reduction instructions.
+    if (opcode == 0x57 && funct3 == 0b010)
+    {
+        ExecuteVectorReduction();
+        return;
+    }
 
     if (opcode == 0b1110011 && funct3 == 0b000)
     {
@@ -743,6 +749,135 @@ void RVSSProcessor::ExecuteVectorMemory()
     vector_mem_pending_ = true;
 }
 
+
+void RVSSProcessor::ExecuteVectorReduction()
+{
+    vector_reduction_pending_ = false;
+
+    const uint8_t funct6 = (current_instruction_ >> 26) & 0x3F;
+    const uint8_t vm = (current_instruction_ >> 25) & 0x01;
+
+    vector_vd_ = (current_instruction_ >> 7) & 0x1F;
+    const uint8_t vs1 = (current_instruction_ >> 15) & 0x1F;
+    const uint8_t vs2 = (current_instruction_ >> 20) & 0x1F;
+
+    // Currently support only vredsum.vs.
+    if (funct6 != 0b000000)
+        return;
+
+    const uint64_t vtype =
+        registers_.ReadCsr(RegisterFile::CSR_VTYPE);
+
+    const uint64_t vl =
+        registers_.ReadCsr(RegisterFile::CSR_VL);
+
+    const uint64_t vstart =
+        registers_.ReadCsr(RegisterFile::CSR_VSTART);
+
+    const VectorConfig config = DecodeVectorConfig(vtype);
+
+    if (config.vill || config.sew_bits == 0 ||
+        vl > config.vlmax || vstart != 0)
+    {
+        return;
+    }
+
+    // RVV specifies no destination update when vl == 0.
+    if (vl == 0)
+        return;
+
+    // Snapshot destination and all sources before calculating.
+    vector_old_value_ = registers_.ReadVreg(vector_vd_);
+    vector_new_value_ = vector_old_value_;
+
+    const RegisterFile::VectorRegister source1 =
+        registers_.ReadVreg(vs1);
+
+    const RegisterFile::VectorRegister source2 =
+        registers_.ReadVreg(vs2);
+
+    const RegisterFile::VectorRegister mask_register =
+        registers_.ReadVreg(0);
+
+    const unsigned int element_bytes = config.sew_bits / 8;
+
+    const unsigned int max_elements =
+        RegisterFile::VLEN_BYTES / element_bytes;
+
+    auto read_element = [](const RegisterFile::VectorRegister &reg,
+                           unsigned int index,
+                           unsigned int bytes) -> uint64_t
+    {
+        uint64_t value = 0;
+
+        for (unsigned int b = 0; b < bytes; b++)
+        {
+            value |= static_cast<uint64_t>(
+                         reg[index * bytes + b])
+                     << (8 * b);
+        }
+
+        return value;
+    };
+
+    auto write_element = [](RegisterFile::VectorRegister &reg,
+                            unsigned int index,
+                            unsigned int bytes,
+                            uint64_t value)
+    {
+        for (unsigned int b = 0; b < bytes; b++)
+        {
+            reg[index * bytes + b] =
+                static_cast<uint8_t>(value >> (8 * b));
+        }
+    };
+
+    const uint64_t element_mask =
+        (config.sew_bits == 64)
+            ? UINT64_MAX
+            : ((1ULL << config.sew_bits) - 1);
+
+    // The scalar accumulator is always included, regardless of vm.
+    uint64_t accumulator =
+        read_element(source1, 0, element_bytes);
+
+    // Reduce the active elements of vs2.
+    for (uint64_t i = 0; i < vl; i++)
+    {
+        const bool mask_active =
+            vm == 1 ||
+            ((mask_register[i / 8] >> (i % 8)) & 0x01) != 0;
+
+        if (!mask_active)
+            continue;
+
+        const uint64_t element =
+            read_element(source2,
+                         static_cast<unsigned int>(i),
+                         element_bytes);
+
+        // Unsigned addition followed by SEW masking gives wraparound.
+        accumulator = (accumulator + element) & element_mask;
+    }
+
+    // Write the scalar reduction result into vd[0].
+    write_element(vector_new_value_, 0,
+                  element_bytes, accumulator);
+
+    // Elements 1 through VLMAX-1 are destination tails.
+    if (config.tail_agnostic)
+    {
+        for (unsigned int i = 1; i < max_elements; i++)
+        {
+            write_element(vector_new_value_, i,
+                          element_bytes, element_mask);
+        }
+    }
+
+    vector_reduction_pending_ = true;
+}
+
+
 // TODO: implement writeback for syscalls
 void RVSSProcessor::HandleSyscall()
 {
@@ -1283,6 +1418,12 @@ void RVSSProcessor::WriteBack()
         WriteBackVectorArithmetic();
         return;
     }
+    // Handle vector reduction writeback.
+    if (opcode == 0x57 && funct3 == 0b010)
+    {
+         WriteBackVectorReduction();
+        return;
+    }
     // Handle vector memory instructions.
     if ((opcode == 0x07 || opcode == 0x27) &&
     (funct3 == 0b000 || funct3 == 0b101 ||
@@ -1650,6 +1791,24 @@ void RVSSProcessor::WriteBackVectorMemory()
 
     vector_mem_pending_ = false;
 }
+
+
+void RVSSProcessor::WriteBackVectorReduction()
+{
+    if (!vector_reduction_pending_)
+        return;
+
+    registers_.WriteVreg(vector_vd_, vector_new_value_);
+
+    if (vector_old_value_ != vector_new_value_)
+    {
+        current_delta_.vector_register_changes.push_back(
+            {vector_vd_, vector_old_value_, vector_new_value_});
+    }
+
+    vector_reduction_pending_ = false;
+}
+
 
 void RVSSProcessor::DebugRun()
 {

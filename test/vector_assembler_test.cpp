@@ -59,6 +59,22 @@ uint32_t assembleVectorMemory(const std::string &source)
 
     return program.text_buffer[0];
 }
+uint32_t assembleVectorReduction(const std::string &source)
+{
+    Kites::setupVmStateDirectory();
+
+    std::istringstream stream(source);
+    Kites::AssembledProgram program = Kites::assemble(stream);
+
+    EXPECT_EQ(program.text_buffer.size(), 1u);
+
+    if (program.text_buffer.empty())
+    {
+        return 0;
+    }
+
+    return program.text_buffer[0];
+}
 } // namespace
 
 TEST(VectorAssemblerTest, EncodesVsetvliE32Correctly)
@@ -209,5 +225,37 @@ TEST(VectorAssemblerTest, EncodesVectorMemoryRegistersCorrectly)
     EXPECT_EQ(
         assembleVectorMemory("vse8.v v17, (x5)\n"),
         0x020288A7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVredsumVSCorrectly)
+{
+    // vredsum.vs v4, v2, v3
+    //
+    // funct6 = 000000
+    // vm     = 1
+    // vs2    = v2
+    // vs1    = v3
+    // funct3 = 010
+    // vd     = v4
+    // opcode = 1010111
+    //
+    // Expected encoding = 0x0221A257
+
+    EXPECT_EQ(
+        assembleVectorReduction("vredsum.vs v4, v2, v3\n"),
+        0x0221A257u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVredsumVSZeroRegistersCorrectly)
+{
+    // vredsum.vs v0, v0, v0
+    //
+    // Expected encoding = 0x02002057
+
+    EXPECT_EQ(
+        assembleVectorReduction("vredsum.vs v0, v0, v0\n"),
+        0x02002057u
     );
 }
