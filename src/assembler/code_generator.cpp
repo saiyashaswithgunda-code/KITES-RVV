@@ -38,6 +38,11 @@ static bool isVectorReductionInstruction(const std::string &opcode)
 {
     return opcode == "vredsum.vs";
 }
+bool isVectorVXInstruction(const std::string &opcode)
+{
+    return opcode == "vadd.vx" ||
+           opcode == "vsub.vx";
+}
 std::vector<std::string>
 printIntermediateCode(const std::vector<std::pair<ICUnit, bool>> &IntermediateCode)
 {
@@ -57,6 +62,11 @@ printIntermediateCode(const std::vector<std::pair<ICUnit, bool>> &IntermediateCo
                 block.getRs2() + ", " + block.getRs1();
         }
         else if (isVectorReductionInstruction(block.getOpcode()))
+        {
+            code = block.getOpcode() + " " + block.getRd() + ", " +
+                block.getRs2() + ", " + block.getRs1();
+        }
+        else if (isVectorVXInstruction(block.getOpcode()))
         {
             code = block.getOpcode() + " " + block.getRd() + ", " +
                 block.getRs2() + ", " + block.getRs1();
@@ -199,6 +209,38 @@ uint32_t generateVectorReductionMachineCode(const ICUnit &block)
     machineCode |= (vm << 25);
     machineCode |= (vs2 << 20);
     machineCode |= (vs1 << 15);
+    machineCode |= (funct3 << 12);
+    machineCode |= (vd << 7);
+    machineCode |= opcodeBits;
+
+    return machineCode;
+}
+uint32_t generateVectorVXTypeMachineCode(const ICUnit &block)
+{
+    uint32_t funct6 = 0;
+    const std::string opcode = block.getOpcode();
+
+    if (opcode == "vadd.vx")
+        funct6 = 0b000000;
+    else if (opcode == "vsub.vx")
+        funct6 = 0b000010;
+    else
+        throw std::runtime_error("Unsupported vector instruction: " + opcode);
+
+    const uint32_t vd  = extractRegisterIndex(block.getRd());
+    const uint32_t vs2 = extractRegisterIndex(block.getRs2());
+    const uint32_t rs1 = extractRegisterIndex(block.getRs1());
+
+    constexpr uint32_t vm = 1;
+    constexpr uint32_t funct3 = 0b100;
+    constexpr uint32_t opcodeBits = 0b1010111;
+
+    uint32_t machineCode = 0;
+
+    machineCode |= (funct6 << 26);
+    machineCode |= (vm << 25);
+    machineCode |= (vs2 << 20);
+    machineCode |= (rs1 << 15);
     machineCode |= (funct3 << 12);
     machineCode |= (vd << 7);
     machineCode |= opcodeBits;
@@ -516,6 +558,10 @@ generateMachineCode(const std::vector<std::pair<ICUnit, bool>> &IntermediateCode
         else if (isVectorReductionInstruction(block.getOpcode()))
         {
              code = generateVectorReductionMachineCode(block);
+        }
+        else if (isVectorVXInstruction(block.getOpcode()))
+        {
+            code = generateVectorVXTypeMachineCode(block);
         }
         else if (instruction_set::isValidRTypeInstruction(block.getOpcode()))
         {

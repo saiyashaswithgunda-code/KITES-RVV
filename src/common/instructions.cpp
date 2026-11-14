@@ -36,6 +36,8 @@ std::unordered_map<Instruction, InstructionEncoding> instruction_encoding_map = 
     {Instruction::kvse64_v, {0b0100111, -1, 0b111, -1, -1, -1}},
 
     {Instruction::kvredsum_vs, {0b1010111, -1, 0b010, -1, 0b000000, -1}},
+    {Instruction::kvadd_vx, {0b1010111, -1, 0b100, -1, 0b000000, -1}},
+    {Instruction::kvsub_vx, {0b1010111, -1, 0b100, -1, 0b000010, -1}},
     
 
     {Instruction::kadd, {0b0110011, -1, 0b000, -1, -1, 0b0000000}},
@@ -223,6 +225,8 @@ std::unordered_map<std::string, Instruction> instruction_string_map = {
     {"vse32.v", Instruction::kvse32_v},
     {"vse64.v", Instruction::kvse64_v},
     {"vredsum.vs", Instruction::kvredsum_vs},
+    {"vadd.vx", Instruction::kvadd_vx},
+    {"vsub.vx", Instruction::kvsub_vx},
 
     {"add", Instruction::kadd},
     {"sub", Instruction::ksub},
@@ -392,6 +396,7 @@ static const std::unordered_set<std::string> valid_instructions = {
     "vle8.v", "vle16.v", "vle32.v", "vle64.v",
     "vse8.v", "vse16.v", "vse32.v", "vse64.v",
     "vredsum.vs",
+    "vadd.vx", "vsub.vx",
 
     "add", "sub", "and", "or", "xor", "sll", "srl", "sra", "slt", "sltu", "addw", "subw", "sllw",
     "srlw", "sraw", "addi", "xori", "ori", "andi", "slli", "srli", "srai", "slti", "sltiu", "addiw",
@@ -823,6 +828,8 @@ std::unordered_map<std::string, std::vector<SyntaxType>> instruction_syntax_map 
     {"vse64.v", {SyntaxType::O_VREG_C_LP_GPR_RP}},
 
     {"vredsum.vs", {SyntaxType::O_VREG_C_VREG_C_VREG}},
+    {"vadd.vx", {SyntaxType::O_VREG_C_VREG_C_GPR}},
+    {"vsub.vx", {SyntaxType::O_VREG_C_VREG_C_GPR}},
     
 
     {"add", {SyntaxType::O_GPR_C_GPR_C_GPR}},
@@ -1247,6 +1254,10 @@ std::string getExpectedSyntaxes(const std::string &opcode)
     }
 
     static const std::unordered_map<SyntaxType, std::string> syntaxTypeToString = {
+        {SyntaxType::O_VREG_C_VREG_C_GPR, "<vec-reg>, <vec-reg>, <gp-reg>"},
+        {SyntaxType::O_VREG_C_VREG_C_VREG, "<vec-reg>, <vec-reg>, <vec-reg>"},
+        {SyntaxType::O_VREG_C_LP_GPR_RP, "<vec-reg>, (<gp-reg>)"},
+        {SyntaxType::O_GPR_C_GPR_C_VTYPE, "<gp-reg>, <gp-reg>, <vtype>"},
         {SyntaxType::O, "<empty>"},
         {SyntaxType::O_GPR_C_GPR_C_GPR, "<gp-reg>, <gp-reg>, <gp-reg>"},
         {SyntaxType::O_GPR_C_GPR_C_I, "<gp-reg>, <gp-reg>, <imm>"},

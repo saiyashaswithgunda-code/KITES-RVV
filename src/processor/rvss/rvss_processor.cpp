@@ -187,8 +187,8 @@ void RVSSProcessor::Execute()
         ExecuteVsetvli();
         return;
     }
-    // Handle vector arithmetic instructions.
-    if (opcode == 0x57 && funct3 == 0b000)
+    // Handle vector arithmetic instructions (OPIVV and OPIVX).
+    if (opcode == 0x57 && (funct3 == 0b000 || funct3 == 0b100))
     {
         ExecuteVectorArithmetic();
         return;
@@ -484,21 +484,41 @@ void RVSSProcessor::ExecuteVectorArithmetic()
 
     const uint8_t funct6 = (current_instruction_ >> 26) & 0x3F;
     const uint8_t vm = (current_instruction_ >> 25) & 0x01;
+    const uint8_t funct3 = (current_instruction_ >> 12) & 0b111;
 
     vector_vd_ = (current_instruction_ >> 7) & 0x1F;
     const uint8_t vs1 = (current_instruction_ >> 15) & 0x1F;
     const uint8_t vs2 = (current_instruction_ >> 20) & 0x1F;
 
-    switch (funct6)
+    if (funct3 == 0b000)
     {
-    case 0b000000:
-    case 0b000010:
-    case 0b001001:
-    case 0b001010:
-    case 0b001011:
-        break;
+        switch (funct6)
+        {
+        case 0b000000:
+        case 0b000010:
+        case 0b001001:
+        case 0b001010:
+        case 0b001011:
+            break;
 
-    default:
+        default:
+            return;
+        }
+    }
+    else if (funct3 == 0b100)
+    {
+        switch (funct6)
+        {
+        case 0b000000: // vadd.vx
+        case 0b000010: // vsub.vx
+            break;
+
+        default:
+            return;
+        }
+    }
+    else
+    {
         return;
     }
 
@@ -527,7 +547,7 @@ void RVSSProcessor::ExecuteVectorArithmetic()
         registers_.ReadVreg(0);
 
     const RegisterFile::VectorRegister source1 =
-        registers_.ReadVreg(vs1);
+        (funct3 == 0b000) ? registers_.ReadVreg(vs1) : RegisterFile::VectorRegister{};
 
     const RegisterFile::VectorRegister source2 =
         registers_.ReadVreg(vs2);
@@ -569,6 +589,10 @@ void RVSSProcessor::ExecuteVectorArithmetic()
             ? UINT64_MAX
             : ((1ULL << config.sew_bits) - 1);
 
+    // For OP-IVX: extract the scalar operand and mask/truncate to the active SEW.
+    const uint64_t scalar_val =
+        (funct3 == 0b100) ? (registers_.ReadGpr(vs1) & element_mask) : 0;
+
     // Process active vector elements.
     for (uint64_t i = vstart; i < vl; i++)
     {
@@ -598,7 +622,7 @@ void RVSSProcessor::ExecuteVectorArithmetic()
             read_element(source2, i, element_bytes);
 
         const uint64_t b =
-            read_element(source1, i, element_bytes);
+            (funct3 == 0b100) ? scalar_val : read_element(source1, i, element_bytes);
 
         uint64_t result = 0;
 
@@ -1412,8 +1436,8 @@ void RVSSProcessor::WriteBack()
         WriteBackVsetvli();
         return;
     }
-    // Handle vector arithmetic writeback.
-    if (opcode == 0x57 && funct3 == 0b000)
+    // Handle vector arithmetic writeback (OPIVV and OPIVX).
+    if (opcode == 0x57 && (funct3 == 0b000 || funct3 == 0b100))
     {
         WriteBackVectorArithmetic();
         return;

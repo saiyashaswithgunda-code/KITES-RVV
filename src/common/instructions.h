@@ -38,6 +38,8 @@ enum class Instruction
     kvse32_v,
     kvse64_v,
     kvredsum_vs,
+    kvadd_vx,
+    kvsub_vx,
 
     kadd,
     ksub,
@@ -431,6 +433,7 @@ enum class SyntaxType
     O_VREG_C_LP_GPR_RP, ///< Opcode vector-register, (general-register)
     O_GPR_C_GPR_C_VTYPE, ///< Opcode general-register , general-register , vtypeimmediate
     O_VREG_C_VREG_C_VREG, ///< Opcode vector-register, vector-register, vector-register
+    O_VREG_C_VREG_C_GPR,  ///< Opcode vector-register, vector-register, general-register
 
     O_GPR_C_GPR_C_GPR,   ///< Opcode general-register , general-register , register
     O_GPR_C_GPR_C_I,     ///< Opcode general-register , general-register , immediate

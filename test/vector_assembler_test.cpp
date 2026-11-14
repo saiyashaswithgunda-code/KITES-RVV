@@ -75,6 +75,22 @@ uint32_t assembleVectorReduction(const std::string &source)
 
     return program.text_buffer[0];
 }
+uint32_t assembleVectorVX(const std::string &source)
+{
+    Kites::setupVmStateDirectory();
+
+    std::istringstream stream(source);
+    Kites::AssembledProgram program = Kites::assemble(stream);
+
+    EXPECT_EQ(program.text_buffer.size(), 1u);
+
+    if (program.text_buffer.empty())
+    {
+        return 0;
+    }
+
+    return program.text_buffer[0];
+}
 } // namespace
 
 TEST(VectorAssemblerTest, EncodesVsetvliE32Correctly)
@@ -257,5 +273,65 @@ TEST(VectorAssemblerTest, EncodesVredsumVSZeroRegistersCorrectly)
     EXPECT_EQ(
         assembleVectorReduction("vredsum.vs v0, v0, v0\n"),
         0x02002057u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVaddVXCorrectly)
+{
+    // vadd.vx v1, v2, x3
+    // funct6 = 000000
+    // vm     = 1
+    // vs2    = 2
+    // rs1    = 3
+    // funct3 = 100
+    // vd     = 1
+    // opcode = 1010111
+    // Expected = 0x0221C0D7
+    EXPECT_EQ(
+        assembleVectorVX("vadd.vx v1, v2, x3\n"),
+        0x0221C0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVsubVXCorrectly)
+{
+    // vsub.vx v1, v2, x3
+    // funct6 = 000010
+    // vm     = 1
+    // vs2    = 2
+    // rs1    = 3
+    // funct3 = 100
+    // vd     = 1
+    // opcode = 1010111
+    // Expected = 0x0A21C0D7
+    EXPECT_EQ(
+        assembleVectorVX("vsub.vx v1, v2, x3\n"),
+        0x0A21C0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVaddVXWithAbiNames)
+{
+    // a0 is x10
+    // rs1 = 10
+    // Expected = 0x022540D7
+    EXPECT_EQ(
+        assembleVectorVX("vadd.vx v1, v2, a0\n"),
+        0x022540D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVaddVXBoundaryRegisters)
+{
+    // vadd.vx v0, v0, x0 -> 0x02004057
+    EXPECT_EQ(
+        assembleVectorVX("vadd.vx v0, v0, x0\n"),
+        0x02004057u
+    );
+
+    // vsub.vx v31, v31, x31 -> 0x0BFFCFD7
+    EXPECT_EQ(
+        assembleVectorVX("vsub.vx v31, v31, x31\n"),
+        0x0BFFCFD7u
     );
 }

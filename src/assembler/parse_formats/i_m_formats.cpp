@@ -684,6 +684,44 @@ bool Parser::parse_vector_vv()
 
     return true;
 }
+
+bool Parser::parse_vector_vx()
+{
+    const unsigned int line = currentToken().line_number;
+
+    // Validate: instruction vd, vs2, rs1
+    if (peekToken(1).line_number != line ||
+        peekToken(1).type != TokenType::VEC_REGISTER ||
+        peekToken(2).type != TokenType::COMMA ||
+        peekToken(3).line_number != line ||
+        peekToken(3).type != TokenType::VEC_REGISTER ||
+        peekToken(4).type != TokenType::COMMA ||
+        peekToken(5).line_number != line ||
+        peekToken(5).type != TokenType::GP_REGISTER ||
+        (peekToken(6).type != TokenType::EOF_ &&
+         peekToken(6).line_number == line))
+    {
+        return false;
+    }
+
+    ICUnit block;
+    block.setOpcode(currentToken().value);
+    block.setLineNumber(line);
+    block.setInstructionIndex(instruction_index_);
+
+    // RISC-V vector-scalar operand order: vd, vs2, rs1.
+    block.setRd(peekToken(1).value);
+    block.setRs2(peekToken(3).value);
+    block.setRs1(reg_alias_to_name.at(peekToken(5).value));
+
+    skipCurrentLine();
+
+    intermediate_code_.emplace_back(block, true);
+    instruction_number_line_number_mapping_[instruction_index_] = line;
+    instruction_index_++;
+
+    return true;
+}
 bool Parser::parse_vector_memory()
 {
     const unsigned int line = currentToken().line_number;
