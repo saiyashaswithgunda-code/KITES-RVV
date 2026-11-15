@@ -2,9 +2,9 @@
 
 ## 1. Status summary
 
-**Latest known verification:** 251/251 GoogleTests passed after Phase 6.
+**Latest known verification:** 311/311 tests passed (100% CTest pass rate).
 
-The statuses below describe the implementation at the handoff point. A
+The statuses below describe the implementation after Batch 1 integer arithmetic. A
 new contributor should run the full suite before making changes to
 confirm the current checkout still matches this baseline.
 
@@ -29,8 +29,20 @@ confirm the current checkout still matches this baseline.
   `vsetvli`               Complete                Parser and machine-code
   assembler/encoding                              tests
 
-  Vector-vector integer   Complete                Five operations listed
-  arithmetic                                      below
+  Vector-vector integer   Complete                Basic arithmetic (vadd,
+  arithmetic                                      vsub, vand, vor, vxor)
+                                                  and min/max (vmin, vminu,
+                                                  vmax, vmaxu)
+
+  Vector-scalar integer   Complete                vadd.vx, vsub.vx,
+  arithmetic                                      vrsub.vx, vmin[u].vx,
+                                                  vmax[u].vx
+
+  Vector-immediate        Complete                vadd.vi, vrsub.vi with
+  integer arithmetic                              simm5 immediate
+
+  Vector single-width     Complete                vredsum.vs across active
+  reduction                                       elements to vd[0]
 
   Unit-stride vector      Complete for current    Eight load/store
   memory                  subset                  variants
@@ -44,8 +56,9 @@ confirm the current checkout still matches this baseline.
   Undo/redo               Complete for covered    Verify for each new
                           vector state changes    instruction
 
-  Additional arithmetic   Pending                 See Section 4
-  families                                        
+  Additional arithmetic   Pending                 Shifts, integer
+  families                                        multiply/divide,
+                                                  saturating arithmetic
 
   Vector comparisons      Pending                 See Section 4
 
@@ -82,11 +95,58 @@ SEW values 8, 16, 32, and 64 bits.
 -   `vand.vv`
 -   `vor.vv`
 -   `vxor.vv`
+-   `vmin.vv`
+-   `vminu.vv`
+-   `vmax.vv`
+-   `vmaxu.vv`
 
-Current implementation supports: - SEW = 8, 16, 32, 64. - LMUL = m1. -
-Configured `vl` and `vstart`. - Masked and unmasked execution. - Tail
-and mask policy behavior. - Source/destination overlap handled by
-snapshotting source values before destination updates.
+Current implementation supports:
+- SEW = 8, 16, 32, 64. LMUL = m1.
+- Configured `vl` and `vstart`.
+- Signed and unsigned comparisons for min/max via bit-preserving `std::bit_cast`.
+- Masked and unmasked execution (`vm=0` and `vm=1`).
+- Tail (`vta`) and mask (`vma`) policy behavior.
+- Source/destination overlap handled by snapshotting source values before destination updates.
+
+### Vector-scalar arithmetic
+
+-   `vadd.vx`
+-   `vsub.vx`
+-   `vrsub.vx`
+-   `vmin.vx`
+-   `vminu.vx`
+-   `vmax.vx`
+-   `vmaxu.vx`
+
+Current implementation supports:
+- Scalar operand extracted from `rs1` as `scalar = rs1 mod 2^SEW`.
+- Signed and unsigned comparisons for min/max via bit-preserving `std::bit_cast` across all SEWs (8, 16, 32, 64).
+- `vrsub.vx` calculates `scalar - vs2[i]`.
+- SEW = 8, 16, 32, 64. LMUL = m1.
+- Source snapshotting of `vs2`, `rs1`, and mask `v0` before modifying `vd`.
+- Masked execution, tail and mask policy behavior, and `vstart` semantics.
+
+### Vector-immediate arithmetic
+
+-   `vadd.vi`
+-   `vrsub.vi`
+
+Current implementation supports:
+- 5-bit signed immediate `simm5` parsed in range `[-16, 15]`, sign-extended to SEW bits.
+- `vadd.vi` calculates `vs2[i] + simm5`.
+- `vrsub.vi` calculates `simm5 - vs2[i]`.
+- Assembler validation and rejection of out-of-range immediates.
+- Masked execution (`vm=0`), tail/mask policies, and undo/redo.
+
+### Vector reduction
+
+-   `vredsum.vs`
+
+Current implementation supports:
+- Sum reduction across active elements in `vs2` added to scalar element `vs1[0]`.
+- Result written to `vd[0]`.
+- Inactive elements beyond `vl` follow tail policy `vta`.
+- Supported for SEW = 8, 16, 32, 64. LMUL = m1.
 
 ### Unit-stride vector memory
 
@@ -107,8 +167,9 @@ expands the scope:
 2.  LMUL is restricted to m1. The VTYPE decoder marks unsupported LMUL
     encodings invalid.
 3.  SEW is restricted to 8, 16, 32, and 64 bits.
-4.  Current vector arithmetic supports only the five vector-vector
-    operations listed above.
+4.  Vector arithmetic currently supports the vector-vector, vector-scalar,
+    vector-immediate integer operations, and single-width sum reduction
+    listed above.
 5.  Current memory support is unit-stride and single-field only.
 6.  The current memory execution path uses the existing RVSS memory
     controller and current-delta tracking. Do not assume it already
@@ -122,45 +183,54 @@ The following are candidates for extension. Verify exact instruction
 encodings, operand forms, and semantics against the RVV 1.0
 specification before coding.
 
-### Priority A --- Vector-scalar arithmetic
+### Priority A --- Vector comparisons
 
-Suggested first additions: - `vadd.vx` - `vsub.vx`
+Possible additions include:
+- `vmseq.vv`, `vmseq.vx`, `vmseq.vi`
+- `vmsne.vv`, `vmsne.vx`, `vmsne.vi`
+- `vmslt.vv`, `vmslt.vx`
+- `vmsltu.vv`, `vmsltu.vx`
+- `vmsle.vv`, `vmsle.vx`, `vmsle.vi`
+- `vmsleu.vv`, `vmsleu.vx`, `vmsleu.vi`
+- `vmsgt.vx`, `vmsgt.vi`
+- `vmsgtu.vx`
 
-Why first: these reuse the existing vector arithmetic execution model,
-but require correct scalar operand extraction, sign extension, and
-element-width behavior.
+Comparison instructions write predicate bits to a vector mask destination
+register (`vd`). Their destination semantics differ from ordinary vector
+arithmetic: result bits are packed into mask elements rather than written as
+full SEW-wide values. Carefully inspect mask-register representation, tail
+policies, and `v0` handling before implementation.
 
-Questions to resolve: - Is the scalar operand treated as XLEN-wide and
-then sign-extended/truncated according to the instruction's
-architectural rules? - What happens when SEW is narrower than XLEN? -
-What happens for negative scalar values? - What operand overlap
-restrictions apply?
+### Priority B --- Vector mask logical operations
 
-### Priority B --- Vector-immediate arithmetic
+Potential family:
+- `vmand.mm`
+- `vmor.mm`
+- `vmxor.mm`
+- `vmnot.m`
+- `vmnand.mm`
+- `vmnor.mm`
+- `vmxnor.mm`
 
-Possible additions: - `vadd.vi` - `vrsub.vi` (verify exact mnemonic and
-semantics; do not assume it is simply `vsub.vi`)
-
-Important: RVV immediate operands have specific sign-extension and
-encoding rules. Do not treat the immediate as an arbitrary unsigned
-5-bit number.
-
-### Priority C --- Vector comparisons
-
-Possible additions include: - `vmseq.vv` - `vmsne.vv` - `vmslt.vv`
-
-Comparison instructions generally write predicate bits to a vector mask
-destination. Their destination semantics differ from ordinary vector
-arithmetic: result bits are packed into mask elements rather than
-written as one full SEW-wide value per element. Carefully inspect
-mask-register representation and `v0` handling before implementation.
-
-### Priority D --- Vector mask logical operations
-
-Potential family: - `vmand.mm` - `vmor.mm` - `vmxor.mm` - `vmnot.m`
-
-These operate on mask bits and require dedicated handling; do not route
+These operate on packed mask bits and require dedicated handling; do not route
 them through ordinary SEW arithmetic without checking the specification.
+
+### Priority C --- Vector shift operations
+
+Possible additions:
+- `vsll.vv`, `vsll.vx`, `vsll.vi` (logical shift left)
+- `vsrl.vv`, `vsrl.vx`, `vsrl.vi` (logical shift right)
+- `vsra.vv`, `vsra.vx`, `vsra.vi` (arithmetic shift right)
+
+Shift amount is taken from the low $\lg(\text{SEW})$ bits of the second operand.
+
+### Priority D --- Vector integer multiply and divide
+
+Potential additions:
+- `vmul.vv`, `vmul.vx`
+- `vmulh.vv`, `vmulh.vx`, `vmulhu.vv`, `vmulhu.vx`, `vmulhsu.vv`, `vmulhsu.vx`
+- `vdiv.vv`, `vdiv.vx`, `vdivu.vv`, `vdivu.vx`
+- `vrem.vv`, `vrem.vx`, `vremu.vv`, `vremu.vx`
 
 ### Priority E --- Additional memory addressing (optional)
 

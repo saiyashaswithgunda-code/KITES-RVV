@@ -14,6 +14,7 @@
 #include <QDebug>
 #include <algorithm>
 #include <atomic>
+#include <bit>
 #include <cctype>
 #include <condition_variable>
 #include <cstdint>
@@ -187,8 +188,8 @@ void RVSSProcessor::Execute()
         ExecuteVsetvli();
         return;
     }
-    // Handle vector arithmetic instructions (OPIVV and OPIVX).
-    if (opcode == 0x57 && (funct3 == 0b000 || funct3 == 0b100))
+    // Handle vector arithmetic instructions (OPIVV, OPIVI, and OPIVX).
+    if (opcode == 0x57 && (funct3 == 0b000 || funct3 == 0b011 || funct3 == 0b100))
     {
         ExecuteVectorArithmetic();
         return;
@@ -496,6 +497,10 @@ void RVSSProcessor::ExecuteVectorArithmetic()
         {
         case 0b000000:
         case 0b000010:
+        case 0b000100:
+        case 0b000101:
+        case 0b000110:
+        case 0b000111:
         case 0b001001:
         case 0b001010:
         case 0b001011:
@@ -511,6 +516,23 @@ void RVSSProcessor::ExecuteVectorArithmetic()
         {
         case 0b000000: // vadd.vx
         case 0b000010: // vsub.vx
+        case 0b000011: // vrsub.vx
+        case 0b000100: // vminu.vx
+        case 0b000101: // vmin.vx
+        case 0b000110: // vmaxu.vx
+        case 0b000111: // vmax.vx
+            break;
+
+        default:
+            return;
+        }
+    }
+    else if (funct3 == 0b011)
+    {
+        switch (funct6)
+        {
+        case 0b000000: // vadd.vi
+        case 0b000011: // vrsub.vi
             break;
 
         default:
@@ -593,6 +615,46 @@ void RVSSProcessor::ExecuteVectorArithmetic()
     const uint64_t scalar_val =
         (funct3 == 0b100) ? (registers_.ReadGpr(vs1) & element_mask) : 0;
 
+    // For OP-IVI: extract 5-bit signed immediate (simm5) and sign-extend to SEW.
+    const uint8_t simm5_raw = (current_instruction_ >> 15) & 0x1F;
+
+    const int32_t simm5_signed =
+        (simm5_raw & 0x10)
+            ? static_cast<int32_t>(simm5_raw) - 32
+            : static_cast<int32_t>(simm5_raw);
+
+    const uint64_t imm_val =
+        static_cast<uint64_t>(simm5_signed) & element_mask;
+
+    auto signed_less = [](uint64_t a, uint64_t b, unsigned int sew_bits) -> bool
+    {
+        switch (sew_bits)
+        {
+        case 8: {
+            const auto sa = std::bit_cast<int8_t>(static_cast<uint8_t>(a));
+            const auto sb = std::bit_cast<int8_t>(static_cast<uint8_t>(b));
+            return sa < sb;
+        }
+        case 16: {
+            const auto sa = std::bit_cast<int16_t>(static_cast<uint16_t>(a));
+            const auto sb = std::bit_cast<int16_t>(static_cast<uint16_t>(b));
+            return sa < sb;
+        }
+        case 32: {
+            const auto sa = std::bit_cast<int32_t>(static_cast<uint32_t>(a));
+            const auto sb = std::bit_cast<int32_t>(static_cast<uint32_t>(b));
+            return sa < sb;
+        }
+        case 64: {
+            const auto sa = std::bit_cast<int64_t>(a);
+            const auto sb = std::bit_cast<int64_t>(b);
+            return sa < sb;
+        }
+        default:
+            return false;
+        }
+    };
+
     // Process active vector elements.
     for (uint64_t i = vstart; i < vl; i++)
     {
@@ -622,7 +684,9 @@ void RVSSProcessor::ExecuteVectorArithmetic()
             read_element(source2, i, element_bytes);
 
         const uint64_t b =
-            (funct3 == 0b100) ? scalar_val : read_element(source1, i, element_bytes);
+            (funct3 == 0b100) ? scalar_val :
+            (funct3 == 0b011) ? imm_val :
+                                read_element(source1, i, element_bytes);
 
         uint64_t result = 0;
 
@@ -634,6 +698,26 @@ void RVSSProcessor::ExecuteVectorArithmetic()
 
         case 0b000010:
             result = a - b;
+            break;
+
+        case 0b000011: // vrsub
+            result = b - a;
+            break;
+
+        case 0b000100: // vminu
+            result = (a < b) ? a : b;
+            break;
+
+        case 0b000101: // vmin
+            result = signed_less(a, b, config.sew_bits) ? a : b;
+            break;
+
+        case 0b000110: // vmaxu
+            result = (a > b) ? a : b;
+            break;
+
+        case 0b000111: // vmax
+            result = signed_less(b, a, config.sew_bits) ? a : b;
             break;
 
         case 0b001001:
@@ -1436,8 +1520,8 @@ void RVSSProcessor::WriteBack()
         WriteBackVsetvli();
         return;
     }
-    // Handle vector arithmetic writeback (OPIVV and OPIVX).
-    if (opcode == 0x57 && (funct3 == 0b000 || funct3 == 0b100))
+    // Handle vector arithmetic writeback (OPIVV, OPIVI, and OPIVX).
+    if (opcode == 0x57 && (funct3 == 0b000 || funct3 == 0b011 || funct3 == 0b100))
     {
         WriteBackVectorArithmetic();
         return;

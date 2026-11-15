@@ -722,6 +722,59 @@ bool Parser::parse_vector_vx()
 
     return true;
 }
+
+bool Parser::parse_vector_vi()
+{
+    const unsigned int line = currentToken().line_number;
+
+    // Validate: instruction vd, vs2, imm
+    if (peekToken(1).line_number != line ||
+        peekToken(1).type != TokenType::VEC_REGISTER ||
+        peekToken(2).type != TokenType::COMMA ||
+        peekToken(3).line_number != line ||
+        peekToken(3).type != TokenType::VEC_REGISTER ||
+        peekToken(4).type != TokenType::COMMA ||
+        peekToken(5).line_number != line ||
+        peekToken(5).type != TokenType::NUM ||
+        (peekToken(6).type != TokenType::EOF_ &&
+         peekToken(6).line_number == line))
+    {
+        return false;
+    }
+
+    ICUnit block;
+    block.setOpcode(currentToken().value);
+    block.setLineNumber(line);
+    block.setInstructionIndex(instruction_index_);
+
+    block.setRd(peekToken(1).value);
+    block.setRs2(peekToken(3).value);
+
+    const int64_t imm = std::stoll(peekToken(5).value);
+    if (-16 <= imm && imm <= 15)
+    {
+        block.setImm(std::to_string(imm));
+    }
+    else
+    {
+        recordError(
+            ParseError(peekToken(5).line_number, "Immediate value out of range"));
+        errors_.all_errors.emplace_back(errors::ImmediateOutOfRangeError(
+            "Immediate value out of range", "Expected: -16 <= imm <= 15", filename_,
+            peekToken(5).line_number, peekToken(5).column_number,
+            (filename_ == "<stream>") ? "" : GetLineFromFile(filename_, peekToken(5).line_number)));
+        skipCurrentLine();
+        return true;
+    }
+
+    skipCurrentLine();
+
+    intermediate_code_.emplace_back(block, true);
+    instruction_number_line_number_mapping_[instruction_index_] = line;
+    instruction_index_++;
+
+    return true;
+}
 bool Parser::parse_vector_memory()
 {
     const unsigned int line = currentToken().line_number;

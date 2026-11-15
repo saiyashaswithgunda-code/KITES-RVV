@@ -91,6 +91,22 @@ uint32_t assembleVectorVX(const std::string &source)
 
     return program.text_buffer[0];
 }
+uint32_t assembleVectorVI(const std::string &source)
+{
+    Kites::setupVmStateDirectory();
+
+    std::istringstream stream(source);
+    Kites::AssembledProgram program = Kites::assemble(stream);
+
+    EXPECT_EQ(program.text_buffer.size(), 1u);
+
+    if (program.text_buffer.empty())
+    {
+        return 0;
+    }
+
+    return program.text_buffer[0];
+}
 } // namespace
 
 TEST(VectorAssemblerTest, EncodesVsetvliE32Correctly)
@@ -334,4 +350,120 @@ TEST(VectorAssemblerTest, EncodesVaddVXBoundaryRegisters)
         assembleVectorVX("vsub.vx v31, v31, x31\n"),
         0x0BFFCFD7u
     );
+}
+
+TEST(VectorAssemblerTest, EncodesVaddVICorrectly)
+{
+    // vadd.vi v1, v2, 3 -> 0x0221B0D7
+    EXPECT_EQ(
+        assembleVectorVI("vadd.vi v1, v2, 3\n"),
+        0x0221B0D7u
+    );
+
+    // vadd.vi v1, v2, -1 -> simm5=31 (0x1F) -> 0x022FB0D7
+    EXPECT_EQ(
+        assembleVectorVI("vadd.vi v1, v2, -1\n"),
+        0x022FB0D7u
+    );
+
+    // vadd.vi v1, v2, -16 -> simm5=16 (0x10) -> 0x022830D7
+    EXPECT_EQ(
+        assembleVectorVI("vadd.vi v1, v2, -16\n"),
+        0x022830D7u
+    );
+
+    // vadd.vi v1, v2, 15 -> simm5=15 (0x0F) -> 0x0227B0D7
+    EXPECT_EQ(
+        assembleVectorVI("vadd.vi v1, v2, 15\n"),
+        0x0227B0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVrsubVXCorrectly)
+{
+    // vrsub.vx v1, v2, x3 -> funct6=000011, funct3=100 -> 0x0E21C0D7
+    EXPECT_EQ(
+        assembleVectorVX("vrsub.vx v1, v2, x3\n"),
+        0x0E21C0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVrsubVICorrectly)
+{
+    // vrsub.vi v1, v2, 3 -> funct6=000011, funct3=011 -> 0x0E21B0D7
+    EXPECT_EQ(
+        assembleVectorVI("vrsub.vi v1, v2, 3\n"),
+        0x0E21B0D7u
+    );
+
+    // vrsub.vi v1, v2, -1 -> simm5=31 -> 0x0E2FB0D7
+    EXPECT_EQ(
+        assembleVectorVI("vrsub.vi v1, v2, -1\n"),
+        0x0E2FB0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesMinMaxVVCorrectly)
+{
+    // vminu.vv v1, v2, v3 -> funct6=000100, funct3=000 -> 0x122180D7
+    EXPECT_EQ(
+        assembleVectorVV("vminu.vv v1, v2, v3\n"),
+        0x122180D7u
+    );
+
+    // vmin.vv v1, v2, v3 -> funct6=000101, funct3=000 -> 0x162180D7
+    EXPECT_EQ(
+        assembleVectorVV("vmin.vv v1, v2, v3\n"),
+        0x162180D7u
+    );
+
+    // vmaxu.vv v1, v2, v3 -> funct6=000110, funct3=000 -> 0x1A2180D7
+    EXPECT_EQ(
+        assembleVectorVV("vmaxu.vv v1, v2, v3\n"),
+        0x1A2180D7u
+    );
+
+    // vmax.vv v1, v2, v3 -> funct6=000111, funct3=000 -> 0x1E2180D7
+    EXPECT_EQ(
+        assembleVectorVV("vmax.vv v1, v2, v3\n"),
+        0x1E2180D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesMinMaxVXCorrectly)
+{
+    // vminu.vx v1, v2, x3 -> funct6=000100, funct3=100 -> 0x1221C0D7
+    EXPECT_EQ(
+        assembleVectorVX("vminu.vx v1, v2, x3\n"),
+        0x1221C0D7u
+    );
+
+    // vmin.vx v1, v2, x3 -> funct6=000101, funct3=100 -> 0x1621C0D7
+    EXPECT_EQ(
+        assembleVectorVX("vmin.vx v1, v2, x3\n"),
+        0x1621C0D7u
+    );
+
+    // vmaxu.vx v1, v2, x3 -> funct6=000110, funct3=100 -> 0x1A21C0D7
+    EXPECT_EQ(
+        assembleVectorVX("vmaxu.vx v1, v2, x3\n"),
+        0x1A21C0D7u
+    );
+
+    // vmax.vx v1, v2, x3 -> funct6=000111, funct3=100 -> 0x1E21C0D7
+    EXPECT_EQ(
+        assembleVectorVX("vmax.vx v1, v2, x3\n"),
+        0x1E21C0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, RejectsOutOfRangeImmediate)
+{
+    Kites::setupVmStateDirectory();
+
+    std::istringstream stream_pos("vadd.vi v1, v2, 16\n");
+    EXPECT_THROW(Kites::assemble(stream_pos), std::runtime_error);
+
+    std::istringstream stream_neg("vadd.vi v1, v2, -17\n");
+    EXPECT_THROW(Kites::assemble(stream_neg), std::runtime_error);
 }

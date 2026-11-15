@@ -131,6 +131,7 @@ class Parser
     bool parse_vsetvli();
     bool parse_vector_vv();
     bool parse_vector_vx();
+    bool parse_vector_vi();
     bool parse_vector_memory();
     
     bool parse_O_GPR_C_GPR_C_GPR();

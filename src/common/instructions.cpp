@@ -38,6 +38,17 @@ std::unordered_map<Instruction, InstructionEncoding> instruction_encoding_map = 
     {Instruction::kvredsum_vs, {0b1010111, -1, 0b010, -1, 0b000000, -1}},
     {Instruction::kvadd_vx, {0b1010111, -1, 0b100, -1, 0b000000, -1}},
     {Instruction::kvsub_vx, {0b1010111, -1, 0b100, -1, 0b000010, -1}},
+    {Instruction::kvadd_vi, {0b1010111, -1, 0b011, -1, 0b000000, -1}},
+    {Instruction::kvrsub_vx, {0b1010111, -1, 0b100, -1, 0b000011, -1}},
+    {Instruction::kvrsub_vi, {0b1010111, -1, 0b011, -1, 0b000011, -1}},
+    {Instruction::kvminu_vv, {0b1010111, -1, 0b000, -1, 0b000100, -1}},
+    {Instruction::kvminu_vx, {0b1010111, -1, 0b100, -1, 0b000100, -1}},
+    {Instruction::kvmin_vv, {0b1010111, -1, 0b000, -1, 0b000101, -1}},
+    {Instruction::kvmin_vx, {0b1010111, -1, 0b100, -1, 0b000101, -1}},
+    {Instruction::kvmaxu_vv, {0b1010111, -1, 0b000, -1, 0b000110, -1}},
+    {Instruction::kvmaxu_vx, {0b1010111, -1, 0b100, -1, 0b000110, -1}},
+    {Instruction::kvmax_vv, {0b1010111, -1, 0b000, -1, 0b000111, -1}},
+    {Instruction::kvmax_vx, {0b1010111, -1, 0b100, -1, 0b000111, -1}},
     
 
     {Instruction::kadd, {0b0110011, -1, 0b000, -1, -1, 0b0000000}},
@@ -227,6 +238,17 @@ std::unordered_map<std::string, Instruction> instruction_string_map = {
     {"vredsum.vs", Instruction::kvredsum_vs},
     {"vadd.vx", Instruction::kvadd_vx},
     {"vsub.vx", Instruction::kvsub_vx},
+    {"vadd.vi", Instruction::kvadd_vi},
+    {"vrsub.vx", Instruction::kvrsub_vx},
+    {"vrsub.vi", Instruction::kvrsub_vi},
+    {"vminu.vv", Instruction::kvminu_vv},
+    {"vminu.vx", Instruction::kvminu_vx},
+    {"vmin.vv", Instruction::kvmin_vv},
+    {"vmin.vx", Instruction::kvmin_vx},
+    {"vmaxu.vv", Instruction::kvmaxu_vv},
+    {"vmaxu.vx", Instruction::kvmaxu_vx},
+    {"vmax.vv", Instruction::kvmax_vv},
+    {"vmax.vx", Instruction::kvmax_vx},
 
     {"add", Instruction::kadd},
     {"sub", Instruction::ksub},
@@ -397,6 +419,9 @@ static const std::unordered_set<std::string> valid_instructions = {
     "vse8.v", "vse16.v", "vse32.v", "vse64.v",
     "vredsum.vs",
     "vadd.vx", "vsub.vx",
+    "vadd.vi", "vrsub.vx", "vrsub.vi",
+    "vminu.vv", "vminu.vx", "vmin.vv", "vmin.vx",
+    "vmaxu.vv", "vmaxu.vx", "vmax.vv", "vmax.vx",
 
     "add", "sub", "and", "or", "xor", "sll", "srl", "sra", "slt", "sltu", "addw", "subw", "sllw",
     "srlw", "sraw", "addi", "xori", "ori", "andi", "slli", "srli", "srai", "slti", "sltiu", "addiw",
@@ -830,6 +855,17 @@ std::unordered_map<std::string, std::vector<SyntaxType>> instruction_syntax_map 
     {"vredsum.vs", {SyntaxType::O_VREG_C_VREG_C_VREG}},
     {"vadd.vx", {SyntaxType::O_VREG_C_VREG_C_GPR}},
     {"vsub.vx", {SyntaxType::O_VREG_C_VREG_C_GPR}},
+    {"vadd.vi", {SyntaxType::O_VREG_C_VREG_C_I}},
+    {"vrsub.vx", {SyntaxType::O_VREG_C_VREG_C_GPR}},
+    {"vrsub.vi", {SyntaxType::O_VREG_C_VREG_C_I}},
+    {"vminu.vv", {SyntaxType::O_VREG_C_VREG_C_VREG}},
+    {"vminu.vx", {SyntaxType::O_VREG_C_VREG_C_GPR}},
+    {"vmin.vv", {SyntaxType::O_VREG_C_VREG_C_VREG}},
+    {"vmin.vx", {SyntaxType::O_VREG_C_VREG_C_GPR}},
+    {"vmaxu.vv", {SyntaxType::O_VREG_C_VREG_C_VREG}},
+    {"vmaxu.vx", {SyntaxType::O_VREG_C_VREG_C_GPR}},
+    {"vmax.vv", {SyntaxType::O_VREG_C_VREG_C_VREG}},
+    {"vmax.vx", {SyntaxType::O_VREG_C_VREG_C_GPR}},
     
 
     {"add", {SyntaxType::O_GPR_C_GPR_C_GPR}},
@@ -1254,6 +1290,7 @@ std::string getExpectedSyntaxes(const std::string &opcode)
     }
 
     static const std::unordered_map<SyntaxType, std::string> syntaxTypeToString = {
+        {SyntaxType::O_VREG_C_VREG_C_I, "<vec-reg>, <vec-reg>, <imm>"},
         {SyntaxType::O_VREG_C_VREG_C_GPR, "<vec-reg>, <vec-reg>, <gp-reg>"},
         {SyntaxType::O_VREG_C_VREG_C_VREG, "<vec-reg>, <vec-reg>, <vec-reg>"},
         {SyntaxType::O_VREG_C_LP_GPR_RP, "<vec-reg>, (<gp-reg>)"},

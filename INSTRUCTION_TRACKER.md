@@ -14,7 +14,7 @@
 
   -----------------------------------------------------------------------------------------
   Instruction   Class /           Assembler    Encoding        RVSS       Tests Status
-                operation                                 execution             
+                operation                                 execution
   ------------- --------------- ----------- ----------- ----------- ----------- -----------
   `vsetvli`     Vector                  Yes         Yes         Yes         Yes Complete
                 configuration                                                   for
@@ -22,43 +22,81 @@
                                                                                 VTYPE
 
   `vadd.vv`     Vector-vector           Yes         Yes         Yes         Yes Complete
-                add                                                             
+                add
 
   `vsub.vv`     Vector-vector           Yes         Yes         Yes         Yes Complete
-                subtract                                                        
+                subtract
 
   `vand.vv`     Vector-vector           Yes         Yes         Yes         Yes Complete
-                AND                                                             
+                AND
 
   `vor.vv`      Vector-vector           Yes         Yes         Yes         Yes Complete
-                OR                                                              
+                OR
 
   `vxor.vv`     Vector-vector           Yes         Yes         Yes         Yes Complete
-                XOR                                                             
+                XOR
+
+  `vmin.vv`     Vector-vector signed    Yes         Yes         Yes         Yes Complete
+                minimum
+
+  `vminu.vv`    Vector-vector unsigned  Yes         Yes         Yes         Yes Complete
+                minimum
+
+  `vmax.vv`     Vector-vector signed    Yes         Yes         Yes         Yes Complete
+                maximum
+
+  `vmaxu.vv`    Vector-vector unsigned  Yes         Yes         Yes         Yes Complete
+                maximum
+
+  `vadd.vx`     Vector-scalar add       Yes         Yes         Yes         Yes Complete
+
+  `vsub.vx`     Vector-scalar subtract  Yes         Yes         Yes         Yes Complete
+
+  `vrsub.vx`    Vector-scalar reverse   Yes         Yes         Yes         Yes Complete
+                subtract
+
+  `vmin.vx`     Vector-scalar signed    Yes         Yes         Yes         Yes Complete
+                minimum
+
+  `vminu.vx`    Vector-scalar unsigned  Yes         Yes         Yes         Yes Complete
+                minimum
+
+  `vmax.vx`     Vector-scalar signed    Yes         Yes         Yes         Yes Complete
+                maximum
+
+  `vmaxu.vx`    Vector-scalar unsigned  Yes         Yes         Yes         Yes Complete
+                maximum
+
+  `vadd.vi`     Vector-immediate add    Yes         Yes         Yes         Yes Complete
+
+  `vrsub.vi`    Vector-immediate        Yes         Yes         Yes         Yes Complete
+                reverse subtract
+
+  `vredsum.vs`  Vector sum reduction    Yes         Yes         Yes         Yes Complete
 
   `vle8.v`      Unit-stride             Yes         Yes         Yes         Yes Complete
-                load, EEW=8                                                     
+                load, EEW=8
 
   `vle16.v`     Unit-stride             Yes         Yes         Yes         Yes Complete
-                load, EEW=16                                                    
+                load, EEW=16
 
   `vle32.v`     Unit-stride             Yes         Yes         Yes         Yes Complete
-                load, EEW=32                                                    
+                load, EEW=32
 
   `vle64.v`     Unit-stride             Yes         Yes         Yes         Yes Complete
-                load, EEW=64                                                    
+                load, EEW=64
 
   `vse8.v`      Unit-stride             Yes         Yes         Yes         Yes Complete
-                store, EEW=8                                                    
+                store, EEW=8
 
   `vse16.v`     Unit-stride             Yes         Yes         Yes         Yes Complete
-                store, EEW=16                                                   
+                store, EEW=16
 
   `vse32.v`     Unit-stride             Yes         Yes         Yes         Yes Complete
-                store, EEW=32                                                   
+                store, EEW=32
 
   `vse64.v`     Unit-stride             Yes         Yes         Yes         Yes Complete
-                store, EEW=64                                                   
+                store, EEW=64
   -----------------------------------------------------------------------------------------
 
 ## 3. Pending arithmetic candidates
@@ -69,13 +107,15 @@ implementing them.
 
   Instruction   Operation                           Suggested priority Status
   ------------- --------------------------------- -------------------- ---------
-  `vadd.vx`     Vector-scalar add                                 High Pending
-  `vsub.vx`     Vector-scalar subtract                            High Pending
-  `vadd.vi`     Vector-immediate add                              High Pending
-  `vrsub.vi`    Reverse subtract with immediate                 Medium Pending
   `vmseq.vv`    Vector equality comparison                      Medium Pending
   `vmsne.vv`    Vector inequality comparison                    Medium Pending
   `vmslt.vv`    Signed less-than comparison                     Medium Pending
+  `vmsltu.vv`   Unsigned less-than comparison                   Medium Pending
+  `vmsle.vv`    Signed less-than-or-equal                       Medium Pending
+  `vmsleu.vv`   Unsigned less-than-or-equal                     Medium Pending
+  `vsll.[vv,vx,vi]` Logical shift left                          Medium Pending
+  `vsrl.[vv,vx,vi]` Logical shift right                         Medium Pending
+  `vsra.[vv,vx,vi]` Arithmetic shift right                      Medium Pending
 
 Note: do not assume `vsub.vi` is a valid substitute for `vrsub.vi`.
 Verify mnemonic availability and operand semantics in the specification.
@@ -101,17 +141,17 @@ automatically suitable.
   Family                  Example mnemonics       Status
   ----------------------- ----------------------- -----------------------
   Strided loads           `vlse8.v`, `vlse16.v`,  Optional / pending
-                          `vlse32.v`, `vlse64.v`  
+                          `vlse32.v`, `vlse64.v`
 
   Strided stores          `vsse8.v`, `vsse16.v`,  Optional / pending
-                          `vsse32.v`, `vsse64.v`  
+                          `vsse32.v`, `vsse64.v`
 
   Indexed unordered loads `vluxei*.v`             Optional / pending
 
   Indexed ordered loads   `vloxei*.v`             Optional / pending
 
   Indexed unordered       `vsuxei*.v`             Optional / pending
-  stores                                          
+  stores
 
   Indexed ordered stores  `vsoxei*.v`             Optional / pending
   -----------------------------------------------------------------------
@@ -126,15 +166,26 @@ instruction or coherent instruction family.
 
   --------------------------------------------------------------------------------
   Instruction /     Assigned to  Branch / PR Status      Tests added Notes
-  feature                                                            
+  feature
   ----------------- ------------ ----------- ----------- ----------- -------------
-  `vadd.vx`,        Unassigned   ---         Pending     ---         First
-  `vsub.vx`                                                          recommended
-                                                                     extension
+  `vadd.vx`,        Completed    `rvv-       Complete    Vector-     SEW 8/16/32/64,
+  `vsub.vx`                      development2`           Arithmetic  scalar mod
+                                                         Test        2^SEW, aliasing
 
-  `vadd.vi`,        Unassigned   ---         Pending     ---         Confirm
-  `vrsub.vi`                                                         immediate
-                                                                     semantics
+  `vadd.vi`,        Completed    `rvv-       Complete    Vector-     simm5 [-16,15],
+  `vrsub.vi`                     development2`           Arithmetic  range checks,
+                                                         Test,       OPIVI format
+                                                         Vector-
+                                                         Assembler
+                                                         Test
+
+  `vrsub.vx`,       Completed    `rvv-       Complete    Vector-     std::bit_cast
+  `vmin[u]`,                     development2`           Arithmetic  signed compare,
+  `vmax[u]`                                              Test        SEW 8/16/32/64
+
+  `vredsum.vs`      Completed    `rvv-       Complete    Vector-     Single-width
+                                 development2`           Reduction   sum reduction
+                                                         Test        into vd[0]
 
   Vector            Unassigned   ---         Pending     ---         Mask
   comparisons                                                        destination
@@ -142,6 +193,9 @@ instruction or coherent instruction family.
   Mask logical      Unassigned   ---         Pending     ---         Packed mask
   operations                                                         bit
                                                                      operations
+
+  Shift             Unassigned   ---         Pending     ---         Shift amount
+  operations                                                         mod SEW
 
   Strided/indexed   Unassigned   ---         Optional    ---         Separate
   memory                                                             larger phase

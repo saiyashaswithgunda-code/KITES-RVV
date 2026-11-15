@@ -102,8 +102,13 @@ complete test suite:
 -   Vector register storage and typed element access.
 -   Vector CSRs and `vsetvli` execution.
 -   Assembler and encoding for `vsetvli`.
--   Vector-vector arithmetic: `vadd.vv`, `vsub.vv`, `vand.vv`, `vor.vv`,
-    `vxor.vv`.
+-   Vector-vector integer arithmetic: `vadd.vv`, `vsub.vv`, `vand.vv`, `vor.vv`,
+    `vxor.vv`, `vmin.vv`, `vminu.vv`, `vmax.vv`, `vmaxu.vv`.
+-   Vector-scalar integer arithmetic: `vadd.vx`, `vsub.vx`, `vrsub.vx`,
+    `vmin.vx`, `vminu.vx`, `vmax.vx`, `vmaxu.vx`.
+-   Vector-immediate integer arithmetic: `vadd.vi`, `vrsub.vi` (immediate range
+    `[-16, 15]`).
+-   Vector reduction: `vredsum.vs` (single-width sum reduction to `vd[0]`).
 -   Unit-stride vector loads and stores: `vle8/16/32/64.v`,
     `vse8/16/32/64.v`.
 -   Masked and unmasked arithmetic and memory behavior.
@@ -112,22 +117,20 @@ complete test suite:
 -   Undo/redo tracking for vector register, CSR, and memory changes
     covered by the implemented instructions.
 
-Latest known full-suite result at the handoff point: **251/251 tests
-passed**.
+Latest known full-suite result: **311/311 tests passed** (100% CTest pass rate).
 
 ## 6. Git history milestones
 
-Known milestone commits on `rvv-development`:
+Known milestone commits on `rvv-development` / `rvv-development2`:
 
 -   `97e9778` --- Implement RVV vector register file
 -   `56e6b19` --- Implement RVV vector configuration and vsetvli
 -   `b88f600` --- Implement RVV vector instruction assembly and encoding
 -   `f3db17b` --- Implement RVV vector memory instructions
 -   `99ddfa0` --- Implement RVV mask and tail semantics
-
-The vector arithmetic execution phase was also committed and pushed; its
-exact commit hash is not recorded in this handoff document. Use
-`git log --oneline --decorate` to inspect the complete history.
+-   `486f84f` --- Implement vredsum.vs vector reduction
+-   `98ec4fc` --- Implement vadd.vx and vsub.vx vector arithmetic
+-   Current Working Tree --- Implement Batch 1 integer arithmetic: `vadd.vi`, `vrsub.vx`, `vrsub.vi`, `vmin[u].vv/vx`, `vmax[u].vv/vx`
 
 ## 7. Recommended continuation strategy
 
