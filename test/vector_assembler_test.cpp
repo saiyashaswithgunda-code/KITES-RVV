@@ -605,3 +605,177 @@ TEST(VectorAssemblerTest, RejectsOutOfRangeShiftImmediate)
     std::istringstream stream_vadd_31("vadd.vi v1, v2, 31\n");
     EXPECT_THROW(Kites::assemble(stream_vadd_31), std::runtime_error);
 }
+
+TEST(VectorAssemblerTest, EncodesVmulVVCorrectly)
+{
+    // vmul.vv v1, v2, v3 -> funct6=100101, funct3=010 -> 0x9621A0D7
+    EXPECT_EQ(
+        assembleVectorVV("vmul.vv v1, v2, v3\n"),
+        0x9621A0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVmulVXCorrectly)
+{
+    // vmul.vx v1, v2, x3 -> funct6=100101, funct3=110 -> 0x9621E0D7
+    EXPECT_EQ(
+        assembleVectorVX("vmul.vx v1, v2, x3\n"),
+        0x9621E0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVmulhVVCorrectly)
+{
+    // vmulh.vv v1, v2, v3 -> funct6=100111, funct3=010 -> 0x9E21A0D7
+    EXPECT_EQ(
+        assembleVectorVV("vmulh.vv v1, v2, v3\n"),
+        0x9E21A0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVmulhVXCorrectly)
+{
+    // vmulh.vx v1, v2, x3 -> funct6=100111, funct3=110 -> 0x9E21E0D7
+    EXPECT_EQ(
+        assembleVectorVX("vmulh.vx v1, v2, x3\n"),
+        0x9E21E0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVmulhuVVCorrectly)
+{
+    // vmulhu.vv v1, v2, v3 -> funct6=100100, funct3=010 -> 0x9221A0D7
+    EXPECT_EQ(
+        assembleVectorVV("vmulhu.vv v1, v2, v3\n"),
+        0x9221A0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVmulhuVXCorrectly)
+{
+    // vmulhu.vx v1, v2, x3 -> funct6=100100, funct3=110 -> 0x9221E0D7
+    EXPECT_EQ(
+        assembleVectorVX("vmulhu.vx v1, v2, x3\n"),
+        0x9221E0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVmulhsuVVCorrectly)
+{
+    // vmulhsu.vv v1, v2, v3 -> funct6=100110, funct3=010 -> 0x9A21A0D7
+    EXPECT_EQ(
+        assembleVectorVV("vmulhsu.vv v1, v2, v3\n"),
+        0x9A21A0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVmulhsuVXCorrectly)
+{
+    // vmulhsu.vx v1, v2, x3 -> funct6=100110, funct3=110 -> 0x9A21E0D7
+    EXPECT_EQ(
+        assembleVectorVX("vmulhsu.vx v1, v2, x3\n"),
+        0x9A21E0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, RejectsNonExistentMultiplyImmediate)
+{
+    Kites::setupVmStateDirectory();
+
+    // vmul.vi does not exist in RVV 1.0
+    std::istringstream stream_vmul_vi("vmul.vi v1, v2, 3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmul_vi), std::runtime_error);
+
+    std::istringstream stream_vmulh_vi("vmulh.vi v1, v2, 3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmulh_vi), std::runtime_error);
+}
+
+TEST(VectorAssemblerTest, EncodesVdivuVVCorrectly)
+{
+    // vdivu.vv v1, v2, v3 -> funct6=100000, funct3=010 -> 0x8221A0D7
+    EXPECT_EQ(
+        assembleVectorVV("vdivu.vv v1, v2, v3\n"),
+        0x8221A0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVdivuVXCorrectly)
+{
+    // vdivu.vx v1, v2, x3 -> funct6=100000, funct3=110 -> 0x8221E0D7
+    EXPECT_EQ(
+        assembleVectorVX("vdivu.vx v1, v2, x3\n"),
+        0x8221E0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVdivVVCorrectly)
+{
+    // vdiv.vv v1, v2, v3 -> funct6=100001, funct3=010 -> 0x8621A0D7
+    EXPECT_EQ(
+        assembleVectorVV("vdiv.vv v1, v2, v3\n"),
+        0x8621A0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVdivVXCorrectly)
+{
+    // vdiv.vx v1, v2, x3 -> funct6=100001, funct3=110 -> 0x8621E0D7
+    EXPECT_EQ(
+        assembleVectorVX("vdiv.vx v1, v2, x3\n"),
+        0x8621E0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVremuVVCorrectly)
+{
+    // vremu.vv v1, v2, v3 -> funct6=100010, funct3=010 -> 0x8A21A0D7
+    EXPECT_EQ(
+        assembleVectorVV("vremu.vv v1, v2, v3\n"),
+        0x8A21A0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVremuVXCorrectly)
+{
+    // vremu.vx v1, v2, x3 -> funct6=100010, funct3=110 -> 0x8A21E0D7
+    EXPECT_EQ(
+        assembleVectorVX("vremu.vx v1, v2, x3\n"),
+        0x8A21E0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVremVVCorrectly)
+{
+    // vrem.vv v1, v2, v3 -> funct6=100011, funct3=010 -> 0x8E21A0D7
+    EXPECT_EQ(
+        assembleVectorVV("vrem.vv v1, v2, v3\n"),
+        0x8E21A0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVremVXCorrectly)
+{
+    // vrem.vx v1, v2, x3 -> funct6=100011, funct3=110 -> 0x8E21E0D7
+    EXPECT_EQ(
+        assembleVectorVX("vrem.vx v1, v2, x3\n"),
+        0x8E21E0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, RejectsNonExistentDivisionImmediate)
+{
+    Kites::setupVmStateDirectory();
+
+    // vdiv.vi and vrem.vi do not exist in RVV 1.0
+    std::istringstream stream_vdiv_vi("vdiv.vi v1, v2, 3\n");
+    EXPECT_THROW(Kites::assemble(stream_vdiv_vi), std::runtime_error);
+
+    std::istringstream stream_vdivu_vi("vdivu.vi v1, v2, 3\n");
+    EXPECT_THROW(Kites::assemble(stream_vdivu_vi), std::runtime_error);
+
+    std::istringstream stream_vrem_vi("vrem.vi v1, v2, 3\n");
+    EXPECT_THROW(Kites::assemble(stream_vrem_vi), std::runtime_error);
+
+    std::istringstream stream_vremu_vi("vremu.vi v1, v2, 3\n");
+    EXPECT_THROW(Kites::assemble(stream_vremu_vi), std::runtime_error);
+}

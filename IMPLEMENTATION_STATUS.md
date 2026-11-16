@@ -2,9 +2,9 @@
 
 ## 1. Status summary
 
-**Latest known verification:** 332/332 tests passed (100% CTest pass rate).
+**Latest known verification:** 373/373 tests passed (100% CTest pass rate).
 
-The statuses below describe the implementation after Batch 1 integer arithmetic. A
+The statuses below describe the implementation after Batch 5 integer division and remainder. A
 new contributor should run the full suite before making changes to
 confirm the current checkout still matches this baseline.
 
@@ -45,6 +45,16 @@ confirm the current checkout still matches this baseline.
   operations                                      vsrl.[vv,vx,vi],
                                                   vsra.[vv,vx,vi]
 
+  Vector integer          Complete                vmul.[vv,vx],
+  multiplication                                  vmulh.[vv,vx],
+                                                  vmulhu.[vv,vx],
+                                                  vmulhsu.[vv,vx]
+
+  Vector integer division Complete                vdiv.[vv,vx],
+  & remainder                                     vdivu.[vv,vx],
+                                                  vrem.[vv,vx],
+                                                  vremu.[vv,vx]
+
   Vector single-width     Complete                vredsum.vs across active
   reduction                                       elements to vd[0]
 
@@ -60,9 +70,8 @@ confirm the current checkout still matches this baseline.
   Undo/redo               Complete for covered    Verify for each new
                           vector state changes    instruction
 
-  Additional arithmetic   Pending                 Shifts, integer
-  families                                        multiply/divide,
-                                                  saturating arithmetic
+  Additional arithmetic   Pending                 Saturating arithmetic,
+  families                                        fixed-point arithmetic
 
   Vector comparisons      Pending                 See Section 4
 
@@ -141,6 +150,54 @@ Current implementation supports:
 - `vrsub.vi` calculates `simm5 - vs2[i]`.
 - Assembler validation and rejection of out-of-range immediates.
 - Masked execution (`vm=0`), tail/mask policies, and undo/redo.
+
+### Vector shift operations
+
+-   `vsll.vv`, `vsll.vx`, `vsll.vi`
+-   `vsrl.vv`, `vsrl.vx`, `vsrl.vi`
+-   `vsra.vv`, `vsra.vx`, `vsra.vi`
+
+Current implementation supports:
+- Shift amounts masked to low $\lg(\text{SEW})$ bits across `.vv`, `.vx`, and `.vi` forms.
+- `.vi` variants parse 5-bit unsigned immediate `uimm5` in range `[0, 31]`.
+- Proper arithmetic right shift (`vsra`) with sign bit preservation for each SEW.
+- SEW = 8, 16, 32, 64. LMUL = m1.
+- Source snapshotting, masking (`vm=0`/`vm=1`), tail/mask policies, and undo/redo.
+
+### Vector integer multiplication
+
+-   `vmul.vv`, `vmul.vx`
+-   `vmulh.vv`, `vmulh.vx`
+-   `vmulhu.vv`, `vmulhu.vx`
+-   `vmulhsu.vv`, `vmulhsu.vx`
+
+Current implementation supports:
+- `vmul` returns low SEW bits using unsigned modular arithmetic.
+- `vmulh` returns upper SEW bits of signed $\times$ signed multiplication.
+- `vmulhu` returns upper SEW bits of unsigned $\times$ unsigned multiplication.
+- `vmulhsu` returns upper SEW bits of signed(`vs2`) $\times$ unsigned(`vs1/rs1`) multiplication.
+- SEW = 8, 16, 32, 64; LMUL = m1.
+- Scalar operands in `.vx` variants are masked/truncated to active SEW and interpreted with instruction-specific signedness.
+- Exact wide arithmetic (using `unsigned __int128` and signed `__int128` for SEW=64) avoiding signed overflow and undefined behavior.
+- Source/destination overlap and hazard safety via operand and mask snapshotting.
+- Masked execution (`vm=0`/`vm=1`), tail policies (`ta`/`tu`), mask policies (`ma`/`mu`), `vstart` boundary semantics, and delta undo/redo.
+
+### Vector integer division and remainder
+
+-   `vdiv.vv`, `vdiv.vx`
+-   `vdivu.vv`, `vdivu.vx`
+-   `vrem.vv`, `vrem.vx`
+-   `vremu.vv`, `vremu.vx`
+
+Current implementation supports:
+- `vdiv` computes signed division rounding toward zero; division by zero returns all ones (`-1`), and signed overflow (`INT_MIN / -1`) returns `INT_MIN` without triggering C++ undefined behavior or divide-error exceptions.
+- `vdivu` computes unsigned division; division by zero returns all ones.
+- `vrem` computes signed remainder with sign of dividend; remainder by zero returns dividend, and signed overflow (`INT_MIN % -1`) returns `0`.
+- `vremu` computes unsigned remainder; remainder by zero returns dividend.
+- SEW = 8, 16, 32, 64; LMUL = m1.
+- Scalar operands in `.vx` variants are masked/truncated to active SEW and interpreted with instruction-specific signedness.
+- Masked execution (`vm=0`/`vm=1`), tail policies (`ta`/`tu`), mask policies (`ma`/`mu`), and delta undo/redo.
+- `vstart` boundary semantics including $vstart \ge vl$ handling where no elements (body or tail) are updated and `vstart` is reset to 0.
 
 ### Vector reduction
 
@@ -229,11 +286,13 @@ Implemented additions:
 Shift amount is taken from the low $\lg(\text{SEW})$ bits of the second operand. Immediate variants use zero-extended 5-bit unsigned immediate (`uimm5`).
 Supported shift amount is masked to log2(SEW) bits for all three operand forms
 
-### Priority D --- Vector integer multiply and divide
+### Priority D --- Vector integer multiply and divide (Implemented)
 
-Potential additions:
+Implemented multiply additions:
 - `vmul.vv`, `vmul.vx`
 - `vmulh.vv`, `vmulh.vx`, `vmulhu.vv`, `vmulhu.vx`, `vmulhsu.vv`, `vmulhsu.vx`
+
+Implemented integer divide/remainder additions:
 - `vdiv.vv`, `vdiv.vx`, `vdivu.vv`, `vdivu.vx`
 - `vrem.vv`, `vrem.vx`, `vremu.vv`, `vremu.vx`
 

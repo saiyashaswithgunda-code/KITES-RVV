@@ -52,12 +52,14 @@ uint32_t EncodeVectorVV(
     uint32_t vd = 3,
     uint32_t vs2 = 1,
     uint32_t vs1 = 2,
-    uint32_t vm = 1)
+    uint32_t vm = 1,
+    uint32_t funct3 = 0b000)
 {
     return (funct6 << 26) |
            (vm << 25) |
            (vs2 << 20) |
            (vs1 << 15) |
+           (funct3 << 12) |
            (vd << 7) |
            0x57u;
 }
@@ -67,13 +69,14 @@ uint32_t EncodeVectorVX(
     uint32_t vd = 3,
     uint32_t vs2 = 1,
     uint32_t rs1 = 2,
-    uint32_t vm = 1)
+    uint32_t vm = 1,
+    uint32_t funct3 = 0b100)
 {
     return (funct6 << 26) |
            (vm << 25) |
            (vs2 << 20) |
            (rs1 << 15) |
-           (0b100 << 12) |
+           (funct3 << 12) |
            (vd << 7) |
            0x57u;
 }
@@ -163,6 +166,31 @@ void TestArithmetic(
     ExpectElements(processor.registers_, 3, expected);
 }
 
+template <typename T>
+void TestMultiplyVV(
+    uint32_t funct6,
+    const std::vector<T> &lhs,
+    const std::vector<T> &rhs,
+    const std::vector<T> &expected)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    LoadVectorProgram(
+        processor,
+        sizeof(T) * 8,
+        static_cast<unsigned int>(lhs.size()),
+        EncodeVectorVV(funct6, 3, 1, 2, 1, 0b010)
+    );
+
+    WriteElements(processor.registers_, 1, lhs);
+    WriteElements(processor.registers_, 2, rhs);
+
+    processor.Step();
+
+    ExpectElements(processor.registers_, 3, expected);
+}
+
 void LoadVectorVXProgram(
     Processor &processor,
     unsigned int sew_bits,
@@ -207,6 +235,35 @@ void TestArithmeticVX(
         sizeof(T) * 8,
         avl,
         EncodeVectorVX(funct6),
+        scalar_val
+    );
+
+    WriteElements(processor.registers_, 1, lhs);
+
+    processor.Step();
+
+    ExpectElements(processor.registers_, 3, expected);
+}
+
+template <typename T>
+void TestMultiplyVX(
+    uint32_t funct6,
+    const std::vector<T> &lhs,
+    uint64_t scalar_val,
+    const std::vector<T> &expected,
+    unsigned int avl = 0)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    if (avl == 0)
+        avl = static_cast<unsigned int>(lhs.size());
+
+    LoadVectorVXProgram(
+        processor,
+        sizeof(T) * 8,
+        avl,
+        EncodeVectorVX(funct6, 3, 1, 2, 1, 0b110),
         scalar_val
     );
 
@@ -1335,11 +1392,11 @@ TEST(VectorArithmeticTest, VstartGreaterThanVLAborts)
 
     processor.Step();
 
-    // Aborts early: destination register untouched
+    // With vstart >= vl, no elements are executed: destination register untouched
     ExpectElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
 
-    // CSR vstart preserved (not reset)
-    EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 3u);
+    // Successfully completed instruction resets CSR vstart to 0
+    EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
 }
 
 TEST(VectorArithmeticTest, Batch1MaskingAndPolicies)
@@ -1761,7 +1818,7 @@ TEST(VectorArithmeticTest, VectorShiftVstart)
         EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
     }
 
-    // Test 3: vstart > vl with vsra.vx -> aborts early, destination unchanged, vstart preserved
+    // Test 3: vstart > vl with vsra.vx -> executes no elements, destination unchanged, vstart reset to 0
     {
         Kites::setupVmStateDirectory();
         Processor processor;
@@ -1776,8 +1833,8 @@ TEST(VectorArithmeticTest, VectorShiftVstart)
 
         // Destination unchanged
         ExpectElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
-        // vstart preserved
-        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 3u);
+        // vstart reset to 0
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
     }
 }
 
@@ -1873,4 +1930,1260 @@ TEST(VectorArithmeticTest, VectorShiftUndoRedo)
     EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(3, 0), 100u);
     EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(3, 1), 0xE0000000u);
     EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+}
+
+// ---------------------------------------------------------
+// Batch 4: Vector Integer Multiplication Tests
+// ---------------------------------------------------------
+
+TEST(VectorArithmeticTest, VmulBasicAllSEW)
+{
+    // vmul.vv (funct6 = 0b100101, funct3 = 0b010)
+    // SEW = 8
+    TestMultiplyVV<uint8_t>(0b100101, {2, 10, 255, 128}, {3, 20, 2, 2}, {6, 200, 254, 0});
+    // SEW = 16
+    TestMultiplyVV<uint16_t>(0b100101, {2, 300, 0xFFFF, 0x8000}, {5, 100, 3, 2}, {10, 30000, 0xFFFD, 0x0000});
+    // SEW = 32
+    TestMultiplyVV<uint32_t>(0b100101, {3, 10000, 0xFFFFFFFF, 0x80000000}, {7, 5000, 2, 2}, {21, 50000000, 0xFFFFFFFE, 0x00000000});
+    // SEW = 64
+    TestMultiplyVV<uint64_t>(0b100101, {10, 0xFFFFFFFFFFFFFFFFULL}, {20, 3}, {200, 0xFFFFFFFFFFFFFFFDULL});
+
+    // vmul.vx (funct6 = 0b100101, funct3 = 0b110)
+    TestMultiplyVX<uint8_t>(0b100101, {1, 2, 3, 4}, 10, {10, 20, 30, 40});
+    // SEW = 8: scalar with high bits set (0xFFFFFFFFFFFFFF03ULL -> 3)
+    TestMultiplyVX<uint8_t>(0b100101, {1, 2, 3, 4}, 0xFFFFFFFFFFFFFF03ULL, {3, 6, 9, 12});
+    TestMultiplyVX<uint16_t>(0b100101, {10, 20}, 5, {50, 100});
+    TestMultiplyVX<uint32_t>(0b100101, {100, 200}, 3, {300, 600});
+    TestMultiplyVX<uint64_t>(0b100101, {1000, 2000}, 4, {4000, 8000});
+}
+
+TEST(VectorArithmeticTest, VmulhuBasicAllSEW)
+{
+    // vmulhu.vv (funct6 = 0b100100, funct3 = 0b010)
+    // SEW = 8: 255 * 255 = 65025 = 0xFE01 -> high 0xFE (254)
+    //          200 * 200 = 40000 = 0x9C40 -> high 0x9C (156)
+    //          128 * 2 = 256 = 0x0100 -> high 1
+    //          2 * 3 = 6 -> high 0
+    TestMultiplyVV<uint8_t>(0b100100, {255, 200, 128, 2}, {255, 200, 2, 3}, {254, 156, 1, 0});
+
+    // SEW = 16: 0xFFFF * 0xFFFF = 0xFFFE0001 -> high 0xFFFE
+    //           0x8000 * 2 = 0x00010000 -> high 1
+    TestMultiplyVV<uint16_t>(0b100100, {0xFFFF, 0x8000}, {0xFFFF, 2}, {0xFFFE, 1});
+
+    // SEW = 32: 0xFFFFFFFF * 0xFFFFFFFF = 0xFFFFFFFE00000001 -> high 0xFFFFFFFE
+    TestMultiplyVV<uint32_t>(0b100100, {0xFFFFFFFF, 0x80000000}, {0xFFFFFFFF, 2}, {0xFFFFFFFE, 1});
+
+    // SEW = 64: 0xFFFFFFFFFFFFFFFF * 0xFFFFFFFFFFFFFFFF -> high 0xFFFFFFFFFFFFFFFE
+    TestMultiplyVV<uint64_t>(0b100100, {0xFFFFFFFFFFFFFFFFULL, 0x8000000000000000ULL}, {0xFFFFFFFFFFFFFFFFULL, 2}, {0xFFFFFFFFFFFFFFFEULL, 1});
+
+    // vmulhu.vx (funct6 = 0b100100, funct3 = 0b110)
+    TestMultiplyVX<uint8_t>(0b100100, {255, 200}, 255, {254, 199});
+    TestMultiplyVX<uint16_t>(0b100100, {0xFFFF, 0x8000}, 0xFFFF, {0xFFFE, 0x7FFF});
+    TestMultiplyVX<uint32_t>(0b100100, {0xFFFFFFFF, 0x80000000}, 0xFFFFFFFF, {0xFFFFFFFE, 0x7FFFFFFF});
+    TestMultiplyVX<uint64_t>(0b100100, {0xFFFFFFFFFFFFFFFFULL, 0x8000000000000000ULL}, 0xFFFFFFFFFFFFFFFFULL, {0xFFFFFFFFFFFFFFFEULL, 0x7FFFFFFFFFFFFFFFULL});
+}
+
+TEST(VectorArithmeticTest, VmulhBasicAllSEW)
+{
+    // vmulh.vv (funct6 = 0b100111, funct3 = 0b010)
+    // SEW = 8: (-1) * (-1) = 1 -> high 0
+    //          (-128) * (-128) = 16384 = 0x4000 -> high 0x40 (64)
+    //          (-1) * 2 = -2 = 0xFFFE -> high 0xFF (-1)
+    //          64 * 4 = 256 = 0x0100 -> high 1
+    TestMultiplyVV<uint8_t>(0b100111, {0xFF, 0x80, 0xFF, 64}, {0xFF, 0x80, 2, 4}, {0, 0x40, 0xFF, 1});
+
+    // SEW = 16: (-32768) * (-32768) = 2^30 = 0x40000000 -> high 0x4000
+    //           (-1) * 2 = -2 -> high 0xFFFF
+    TestMultiplyVV<uint16_t>(0b100111, {0x8000, 0xFFFF}, {0x8000, 2}, {0x4000, 0xFFFF});
+
+    // SEW = 32: INT32_MIN * INT32_MIN -> high 0x40000000
+    //           (-1) * 5 -> high 0xFFFFFFFF
+    TestMultiplyVV<uint32_t>(0b100111, {0x80000000, 0xFFFFFFFF}, {0x80000000, 5}, {0x40000000, 0xFFFFFFFF});
+
+    // SEW = 64: INT64_MIN * INT64_MIN -> high 0x4000000000000000
+    //           (-1) * 10 -> high 0xFFFFFFFFFFFFFFFF
+    TestMultiplyVV<uint64_t>(0b100111, {0x8000000000000000ULL, 0xFFFFFFFFFFFFFFFFULL}, {0x8000000000000000ULL, 10}, {0x4000000000000000ULL, 0xFFFFFFFFFFFFFFFFULL});
+
+    // vmulh.vx (funct6 = 0b100111, funct3 = 0b110)
+    TestMultiplyVX<uint8_t>(0b100111, {0x80, 0xFF}, 0x80, {0x40, 0});
+    TestMultiplyVX<uint16_t>(0b100111, {0x8000, 0xFFFF}, 0x8000, {0x4000, 0});
+    TestMultiplyVX<uint32_t>(0b100111, {0x80000000, 0xFFFFFFFF}, 0x80000000, {0x40000000, 0});
+    TestMultiplyVX<uint64_t>(0b100111, {0x8000000000000000ULL, 0xFFFFFFFFFFFFFFFFULL}, 0x8000000000000000ULL, {0x4000000000000000ULL, 0});
+}
+
+TEST(VectorArithmeticTest, VmulhsuBasicAllSEWAndAsymmetry)
+{
+    // vmulhsu: high_half(signed(vs2) * unsigned(vs1))
+    // funct6 = 0b100110, funct3 = 0b010 (.vv), 0b110 (.vx)
+
+    // SEW = 8:
+    // Case 1: vs2 = -1 (0xFF), vs1 = 2 -> (-1) * 2 = -2 -> high 0xFF
+    // Case 2: vs2 = 2, vs1 = 255 (0xFF) -> 2 * 255 = 510 = 0x01FE -> high 1
+    TestMultiplyVV<uint8_t>(0b100110, {0xFF, 2}, {2, 0xFF}, {0xFF, 1});
+    TestMultiplyVX<uint8_t>(0b100110, {0xFF}, 2, {0xFF});
+    TestMultiplyVX<uint8_t>(0b100110, {2}, 0xFF, {1});
+
+    // SEW = 16:
+    // Case 1: vs2 = -1 (0xFFFF), vs1 = 2 -> high 0xFFFF
+    // Case 2: vs2 = 2, vs1 = 0xFFFF (65535) -> 2 * 65535 = 131070 -> high 1
+    TestMultiplyVV<uint16_t>(0b100110, {0xFFFF, 2}, {2, 0xFFFF}, {0xFFFF, 1});
+    TestMultiplyVX<uint16_t>(0b100110, {0xFFFF}, 2, {0xFFFF});
+    TestMultiplyVX<uint16_t>(0b100110, {2}, 0xFFFF, {1});
+
+    // SEW = 32:
+    // Case 1: vs2 = -1, vs1 = 2 -> high 0xFFFFFFFF
+    // Case 2: vs2 = 2, vs1 = 0xFFFFFFFF -> high 1
+    TestMultiplyVV<uint32_t>(0b100110, {0xFFFFFFFF, 2}, {2, 0xFFFFFFFF}, {0xFFFFFFFF, 1});
+    TestMultiplyVX<uint32_t>(0b100110, {0xFFFFFFFF}, 2, {0xFFFFFFFF});
+    TestMultiplyVX<uint32_t>(0b100110, {2}, 0xFFFFFFFF, {1});
+
+    // SEW = 64:
+    // Case 1: vs2 = -1, vs1 = 2 -> high 0xFFFFFFFFFFFFFFFF
+    // Case 2: vs2 = 2, vs1 = 0xFFFFFFFFFFFFFFFF -> high 1
+    TestMultiplyVV<uint64_t>(0b100110, {0xFFFFFFFFFFFFFFFFULL, 2}, {2, 0xFFFFFFFFFFFFFFFFULL}, {0xFFFFFFFFFFFFFFFFULL, 1});
+    TestMultiplyVX<uint64_t>(0b100110, {0xFFFFFFFFFFFFFFFFULL}, 2, {0xFFFFFFFFFFFFFFFFULL});
+    TestMultiplyVX<uint64_t>(0b100110, {2}, 0xFFFFFFFFFFFFFFFFULL, {1});
+}
+
+TEST(VectorArithmeticTest, VectorMultiplyEdgeCasesAndExtrema)
+{
+    // 1. Zero and one
+    // vmul.vv with 0 and 1
+    TestMultiplyVV<uint32_t>(0b100101, {12345, 67890}, {0, 1}, {0, 67890});
+    // vmul.vx with 0 and 1
+    TestMultiplyVX<uint32_t>(0b100101, {10, 20, 30}, 0, {0, 0, 0});
+    TestMultiplyVX<uint32_t>(0b100101, {10, 20, 30}, 1, {10, 20, 30});
+
+    // 2. Positive x positive with both high and low halves nonzero
+    // SEW = 8: 20 * 20 = 400 = 0x0190 -> low 0x90 (144), high 0x01 (1)
+    TestMultiplyVV<uint8_t>(0b100101, {20}, {20}, {0x90});
+    TestMultiplyVV<uint8_t>(0b100100, {20}, {20}, {0x01});
+    TestMultiplyVV<uint8_t>(0b100111, {20}, {20}, {0x01});
+
+    // SEW = 16: 1000 * 1000 = 1000000 = 0x000F4240 -> low 0x4240 (16960), high 0x000F (15)
+    TestMultiplyVV<uint16_t>(0b100101, {1000}, {1000}, {0x4240});
+    TestMultiplyVV<uint16_t>(0b100100, {1000}, {1000}, {0x000F});
+    TestMultiplyVV<uint16_t>(0b100111, {1000}, {1000}, {0x000F});
+
+    // SEW = 32: 70000 * 70000 = 4900000000 = 0x124101100 -> low 0x24101100 (605032704), high 1
+    TestMultiplyVV<uint32_t>(0b100101, {70000}, {70000}, {0x24101100});
+    TestMultiplyVV<uint32_t>(0b100100, {70000}, {70000}, {1});
+    TestMultiplyVV<uint32_t>(0b100111, {70000}, {70000}, {1});
+
+    // SEW = 64: 0x100000001ULL * 0x100000002ULL = 0x10000000300000002ULL
+    // low: 0x0000000300000002ULL, high: 1
+    TestMultiplyVV<uint64_t>(0b100101, {0x100000001ULL}, {0x100000002ULL}, {0x0000000300000002ULL});
+    TestMultiplyVV<uint64_t>(0b100100, {0x100000001ULL}, {0x100000002ULL}, {1});
+    TestMultiplyVV<uint64_t>(0b100111, {0x100000001ULL}, {0x100000002ULL}, {1});
+
+    // 3. Negative x positive
+    // SEW = 8: (-5) * 10 = -50 = 0xFFCE -> low 0xCE, high 0xFF (-1)
+    TestMultiplyVV<uint8_t>(0b100101, {static_cast<uint8_t>(-5)}, {10}, {0xCE});
+    TestMultiplyVV<uint8_t>(0b100111, {static_cast<uint8_t>(-5)}, {10}, {0xFF});
+
+    // SEW = 32: (-1000) * 2000 = -2000000 = 0xFFFFFFFFFFE17B80 -> low 0xFFE17B80, high 0xFFFFFFFF
+    TestMultiplyVV<uint32_t>(0b100101, {static_cast<uint32_t>(-1000)}, {2000}, {0xFFE17B80});
+    TestMultiplyVV<uint32_t>(0b100111, {static_cast<uint32_t>(-1000)}, {2000}, {0xFFFFFFFF});
+
+    // 4. Negative x negative
+    // SEW = 8: (-2) * (-3) = 6 = 0x0006 -> low 6, high 0
+    TestMultiplyVV<uint8_t>(0b100101, {static_cast<uint8_t>(-2)}, {static_cast<uint8_t>(-3)}, {6});
+    TestMultiplyVV<uint8_t>(0b100111, {static_cast<uint8_t>(-2)}, {static_cast<uint8_t>(-3)}, {0});
+
+    // SEW = 32: (-100000) * (-100000) = 10000000000 = 0x00000002540BE400 -> low 0x540BE400, high 2
+    TestMultiplyVV<uint32_t>(0b100101, {static_cast<uint32_t>(-100000)}, {static_cast<uint32_t>(-100000)}, {0x540BE400});
+    TestMultiplyVV<uint32_t>(0b100111, {static_cast<uint32_t>(-100000)}, {static_cast<uint32_t>(-100000)}, {2});
+
+    // 5. Maximum unsigned values: (2^SEW - 1)^2 = (2^SEW - 2) * 2^SEW + 1
+    // low is always 1, high is always 2^SEW - 2
+    TestMultiplyVV<uint8_t>(0b100101, {0xFF}, {0xFF}, {1});
+    TestMultiplyVV<uint8_t>(0b100100, {0xFF}, {0xFF}, {0xFE});
+
+    TestMultiplyVV<uint16_t>(0b100101, {0xFFFF}, {0xFFFF}, {1});
+    TestMultiplyVV<uint16_t>(0b100100, {0xFFFF}, {0xFFFF}, {0xFFFE});
+
+    TestMultiplyVV<uint32_t>(0b100101, {0xFFFFFFFF}, {0xFFFFFFFF}, {1});
+    TestMultiplyVV<uint32_t>(0b100100, {0xFFFFFFFF}, {0xFFFFFFFF}, {0xFFFFFFFE});
+
+    TestMultiplyVV<uint64_t>(0b100101, {0xFFFFFFFFFFFFFFFFULL}, {0xFFFFFFFFFFFFFFFFULL}, {1});
+    TestMultiplyVV<uint64_t>(0b100100, {0xFFFFFFFFFFFFFFFFULL}, {0xFFFFFFFFFFFFFFFFULL}, {0xFFFFFFFFFFFFFFFEULL});
+
+    // 6. Minimum signed square: (-2^(SEW-1))^2 = 2^(2SEW-2) -> low is 0, high is 2^(SEW-2)
+    TestMultiplyVV<uint8_t>(0b100101, {0x80}, {0x80}, {0});
+    TestMultiplyVV<uint8_t>(0b100111, {0x80}, {0x80}, {0x40});
+
+    TestMultiplyVV<uint16_t>(0b100101, {0x8000}, {0x8000}, {0});
+    TestMultiplyVV<uint16_t>(0b100111, {0x8000}, {0x8000}, {0x4000});
+
+    TestMultiplyVV<uint32_t>(0b100101, {0x80000000}, {0x80000000}, {0});
+    TestMultiplyVV<uint32_t>(0b100111, {0x80000000}, {0x80000000}, {0x40000000});
+
+    TestMultiplyVV<uint64_t>(0b100101, {0x8000000000000000ULL}, {0x8000000000000000ULL}, {0});
+    TestMultiplyVV<uint64_t>(0b100111, {0x8000000000000000ULL}, {0x8000000000000000ULL}, {0x4000000000000000ULL});
+
+    // 7. Minimum signed x Maximum signed: (-2^(SEW-1)) * (2^(SEW-1) - 1)
+    // SEW = 8: (-128) * 127 = -16256 = 0xC080 -> low 0x80, high 0xC0
+    TestMultiplyVV<uint8_t>(0b100101, {0x80}, {0x7F}, {0x80});
+    TestMultiplyVV<uint8_t>(0b100111, {0x80}, {0x7F}, {0xC0});
+
+    // SEW = 16: (-32768) * 32767 = 0xC0008000 -> low 0x8000, high 0xC000
+    TestMultiplyVV<uint16_t>(0b100101, {0x8000}, {0x7FFF}, {0x8000});
+    TestMultiplyVV<uint16_t>(0b100111, {0x8000}, {0x7FFF}, {0xC000});
+
+    // SEW = 32: (-2^31) * (2^31 - 1) = 0xC000000080000000 -> low 0x80000000, high 0xC0000000
+    TestMultiplyVV<uint32_t>(0b100101, {0x80000000}, {0x7FFFFFFF}, {0x80000000});
+    TestMultiplyVV<uint32_t>(0b100111, {0x80000000}, {0x7FFFFFFF}, {0xC0000000});
+
+    // SEW = 64: INT64_MIN * INT64_MAX -> low 0x8000000000000000, high 0xC000000000000000
+    TestMultiplyVV<uint64_t>(0b100101, {0x8000000000000000ULL}, {0x7FFFFFFFFFFFFFFFULL}, {0x8000000000000000ULL});
+    TestMultiplyVV<uint64_t>(0b100111, {0x8000000000000000ULL}, {0x7FFFFFFFFFFFFFFFULL}, {0xC000000000000000ULL});
+
+    // 8. Maximum signed square: (2^(SEW-1) - 1)^2
+    // SEW = 8: 127 * 127 = 16129 = 0x3F01 -> low 1, high 0x3F
+    TestMultiplyVV<uint8_t>(0b100101, {0x7F}, {0x7F}, {1});
+    TestMultiplyVV<uint8_t>(0b100111, {0x7F}, {0x7F}, {0x3F});
+
+    // SEW = 16: 32767 * 32767 = 0x3FFF0001 -> low 1, high 0x3FFF
+    TestMultiplyVV<uint16_t>(0b100101, {0x7FFF}, {0x7FFF}, {1});
+    TestMultiplyVV<uint16_t>(0b100111, {0x7FFF}, {0x7FFF}, {0x3FFF});
+
+    // SEW = 32: (2^31 - 1)^2 = 0x3FFFFFFF00000001 -> low 1, high 0x3FFFFFFF
+    TestMultiplyVV<uint32_t>(0b100101, {0x7FFFFFFF}, {0x7FFFFFFF}, {1});
+    TestMultiplyVV<uint32_t>(0b100111, {0x7FFFFFFF}, {0x7FFFFFFF}, {0x3FFFFFFF});
+
+    // SEW = 64: INT64_MAX * INT64_MAX -> low 1, high 0x3FFFFFFFFFFFFFFF
+    TestMultiplyVV<uint64_t>(0b100101, {0x7FFFFFFFFFFFFFFFULL}, {0x7FFFFFFFFFFFFFFFULL}, {1});
+    TestMultiplyVV<uint64_t>(0b100111, {0x7FFFFFFFFFFFFFFFULL}, {0x7FFFFFFFFFFFFFFFULL}, {0x3FFFFFFFFFFFFFFFULL});
+}
+
+TEST(VectorArithmeticTest, VectorMultiplyScalarTruncationHighHalf)
+{
+    // Verify that for all high-half .vx instructions, only the low SEW bits of the scalar GPR
+    // operand affect the result, and that signedness interpretation matches the instruction:
+    // - vmulhu.vx: scalar treated as unsigned after truncation.
+    // - vmulhsu.vx: scalar treated as unsigned after truncation.
+    // - vmulh.vx: scalar treated as signed after truncation.
+
+    // -------------------------------------------------------------
+    // 1. vmulhu.vx (funct6 = 0b100100, funct3 = 0b110)
+    // -------------------------------------------------------------
+    // SEW = 8: scalar has nonzero upper bits (0x123456789ABC01FF -> low 8 bits = 0xFF = 255)
+    // vs2 = {255, 200, 128, 2}
+    // 255 * 255 = 65025 = 0xFE01 -> high 0xFE (254)
+    // 200 * 255 = 51000 = 0xC738 -> high 0xC7 (199)
+    // 128 * 255 = 32640 = 0x7F80 -> high 0x7F (127)
+    // 2 * 255 = 510 = 0x01FE -> high 1
+    TestMultiplyVX<uint8_t>(0b100100, {255, 200, 128, 2}, 0x123456789ABC01FFULL, {0xFE, 199, 127, 1});
+
+    // SEW = 16: scalar has nonzero upper bits (0xDEADBEEF0001FFFF -> low 16 bits = 0xFFFF = 65535)
+    // vs2 = {0xFFFF, 0x8000, 2}
+    // 0xFFFF * 0xFFFF = 0xFFFE0001 -> high 0xFFFE
+    // 0x8000 * 0xFFFF = 0x7FFF8000 -> high 0x7FFF
+    // 2 * 0xFFFF = 0x0001FFFE -> high 1
+    TestMultiplyVX<uint16_t>(0b100100, {0xFFFF, 0x8000, 2}, 0xDEADBEEF0001FFFFULL, {0xFFFE, 0x7FFF, 1});
+
+    // SEW = 32: scalar has nonzero upper bits (0xCAFEBABEFFFFFFFF -> low 32 bits = 0xFFFFFFFF)
+    // vs2 = {0xFFFFFFFF, 0x80000000, 2}
+    // 0xFFFFFFFF * 0xFFFFFFFF = 0xFFFFFFFE00000001 -> high 0xFFFFFFFE
+    // 0x80000000 * 0xFFFFFFFF = 0x7FFFFFFF80000000 -> high 0x7FFFFFFF
+    // 2 * 0xFFFFFFFF = 0x00000001FFFFFFFE -> high 1
+    TestMultiplyVX<uint32_t>(0b100100, {0xFFFFFFFF, 0x80000000, 2}, 0xCAFEBABEFFFFFFFFULL, {0xFFFFFFFE, 0x7FFFFFFF, 1});
+
+    // -------------------------------------------------------------
+    // 2. vmulhsu.vx (funct6 = 0b100110, funct3 = 0b110)
+    // signed(vs2) * unsigned(scalar)
+    // -------------------------------------------------------------
+    // SEW = 8: scalar has nonzero upper bits (0xAAAAAAAAAAAA01FF -> low 8 bits = 0xFF = 255 unsigned)
+    // vs2 = {-1 (0xFF), -128 (0x80), 2}
+    // (-1) * 255 = -255 = 0xFF01 -> high 0xFF (if scalar was signed, (-1)*(-1)=1 -> high 0)
+    // (-128) * 255 = -32640 = 0x8080 -> high 0x80
+    // 2 * 255 = 510 = 0x01FE -> high 1
+    TestMultiplyVX<uint8_t>(0b100110, {0xFF, 0x80, 2}, 0xAAAAAAAAAAAA01FFULL, {0xFF, 0x80, 1});
+
+    // SEW = 16: scalar has nonzero upper bits (0xBBBBBBBB0001FFFF -> low 16 bits = 0xFFFF = 65535 unsigned)
+    // vs2 = {-1 (0xFFFF), -32768 (0x8000), 2}
+    // (-1) * 65535 = -65535 = 0xFFFF0001 -> high 0xFFFF
+    // (-32768) * 65535 = 0x80008000 -> high 0x8000
+    // 2 * 65535 = 131070 = 0x0001FFFE -> high 1
+    TestMultiplyVX<uint16_t>(0b100110, {0xFFFF, 0x8000, 2}, 0xBBBBBBBB0001FFFFULL, {0xFFFF, 0x8000, 1});
+
+    // SEW = 32: scalar has nonzero upper bits (0x55555555FFFFFFFF -> low 32 bits = 0xFFFFFFFF = 2^32-1 unsigned)
+    // vs2 = {-1, -2^31 (0x80000000), 2}
+    // (-1) * (2^32-1) = 0xFFFFFFFF00000001 -> high 0xFFFFFFFF
+    // (-2^31) * (2^32-1) = 0x8000000080000000 -> high 0x80000000
+    // 2 * (2^32-1) = 0x00000001FFFFFFFE -> high 1
+    TestMultiplyVX<uint32_t>(0b100110, {0xFFFFFFFF, 0x80000000, 2}, 0x55555555FFFFFFFFULL, {0xFFFFFFFF, 0x80000000, 1});
+
+    // -------------------------------------------------------------
+    // 3. vmulh.vx (funct6 = 0b100111, funct3 = 0b110)
+    // signed(vs2) * signed(scalar)
+    // -------------------------------------------------------------
+    // SEW = 8: scalar has nonzero upper bits (0x11223344556601FF -> low 8 bits = 0xFF = -1 signed)
+    // vs2 = {-1 (0xFF), -128 (0x80), 64 (0x40), 2}
+    // (-1) * (-1) = 1 = 0x0001 -> high 0 (if scalar was unsigned, (-1)*255 -> high 0xFF)
+    // (-128) * (-1) = 128 = 0x0080 -> high 0
+    // 64 * (-1) = -64 = 0xFFC0 -> high 0xFF
+    // 2 * (-1) = -2 = 0xFFFE -> high 0xFF
+    TestMultiplyVX<uint8_t>(0b100111, {0xFF, 0x80, 0x40, 2}, 0x11223344556601FFULL, {0, 0, 0xFF, 0xFF});
+
+    // SEW = 16: scalar has nonzero upper bits (0x998877660001FFFF -> low 16 bits = 0xFFFF = -1 signed)
+    // vs2 = {-1 (0xFFFF), -32768 (0x8000), 100}
+    // (-1) * (-1) = 1 -> high 0
+    // (-32768) * (-1) = 32768 = 0x00008000 -> high 0
+    // 100 * (-1) = -100 = 0xFFFFFF9C -> high 0xFFFF
+    TestMultiplyVX<uint16_t>(0b100111, {0xFFFF, 0x8000, 100}, 0x998877660001FFFFULL, {0, 0, 0xFFFF});
+
+    // SEW = 32: scalar has nonzero upper bits (0x12345678FFFFFFFF -> low 32 bits = 0xFFFFFFFF = -1 signed)
+    // vs2 = {-1, -2^31 (0x80000000), 500}
+    // (-1) * (-1) = 1 -> high 0
+    // (-2^31) * (-1) = 2^31 = 0x0000000080000000 -> high 0
+    // 500 * (-1) = -500 -> high 0xFFFFFFFF
+    TestMultiplyVX<uint32_t>(0b100111, {0xFFFFFFFF, 0x80000000, 500}, 0x12345678FFFFFFFFULL, {0, 0, 0xFFFFFFFF});
+}
+
+TEST(VectorArithmeticTest, VectorMultiplyMaskingAndPolicies)
+{
+    // Test 1: vmul.vv masked with mu (mask-undisturbed)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vmul.vv v3, v1, v2, v0.t (vm = 0, funct3 = 0b010, ta = false, ma = false)
+        LoadVectorProgram(processor, 32, 4, EncodeVectorVV(0b100101, 3, 1, 2, 0, 0b010));
+
+        // Mask in v0: bit 0 = 1, bit 1 = 0, bit 2 = 1, bit 3 = 0 -> 0b00000101
+        processor.registers_.WriteVregElement<uint8_t>(0, 0, 0b00000101);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {2, 3, 4, 5});
+        WriteElements<uint32_t>(processor.registers_, 2, {10, 20, 30, 40});
+        WriteElements<uint32_t>(processor.registers_, 3, {100, 200, 300, 400});
+
+        processor.Step();
+
+        // Element 0: active -> 2 * 10 = 20
+        // Element 1: masked-off, mu -> retains 200
+        // Element 2: active -> 4 * 30 = 120
+        // Element 3: masked-off, mu -> retains 400
+        ExpectElements<uint32_t>(processor.registers_, 3, {20, 200, 120, 400});
+    }
+
+    // Test 2: vmulh.vx masked with ma (mask-agnostic, inactive elements filled with 1s)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vmulh.vx v3, v1, x2, v0.t (vm = 0, funct3 = 0b110, ta = false, ma = true)
+        LoadVectorVXProgram(processor, 32, 4, EncodeVectorVX(0b100111, 3, 1, 2, 0, 0b110), 0x80000000, 2, false, true);
+
+        // Mask in v0: bit 0 = 0, bit 1 = 1, bit 2 = 0, bit 3 = 1 -> 0b00001010
+        processor.registers_.WriteVregElement<uint8_t>(0, 0, 0b00001010);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {0x80000000, 0x80000000, 0x40, 0x40});
+        WriteElements<uint32_t>(processor.registers_, 3, {100, 200, 300, 400});
+
+        processor.Step();
+
+        // Element 0: inactive, ma -> 0xFFFFFFFF
+        // Element 1: active -> INT32_MIN * INT32_MIN high -> 0x40000000
+        // Element 2: inactive, ma -> 0xFFFFFFFF
+        // Element 3: active -> 0x40 * INT32_MIN high -> (-2^31 * 64) high = -32 = 0xFFFFFFE0
+        // 64 * (-2147483648) = -137438953472 = 0xFFFFFFE0_00000000 -> high is 0xFFFFFFE0
+        ExpectElements<uint32_t>(processor.registers_, 3, {0xFFFFFFFFu, 0x40000000u, 0xFFFFFFFFu, 0xFFFFFFE0u});
+    }
+}
+
+TEST(VectorArithmeticTest, VectorMultiplyTailPolicy)
+{
+    // Test 1: tail-agnostic (ta = true) for vmulhu.vv
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vmulhu.vv v3, v1, v2 with vl = 2 < VLMAX (VLMAX = 4 for SEW=32)
+        // ta = true (tail-agnostic)
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(32, true, false),
+            EncodeVectorVV(0b100100, 3, 1, 2, 1, 0b010)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 2);
+        processor.Step(); // configure vtype/vl
+
+        WriteElements<uint32_t>(processor.registers_, 1, {0xFFFFFFFF, 0x80000000, 0x10, 0x20});
+        WriteElements<uint32_t>(processor.registers_, 2, {0xFFFFFFFF, 2, 0x10, 0x20});
+        WriteElements<uint32_t>(processor.registers_, 3, {100, 200, 300, 400});
+
+        processor.Step();
+
+        // Elements 0, 1 active: high half of 0xFFFFFFFF * 0xFFFFFFFF = 0xFFFFFFFE, high half of 0x80000000 * 2 = 1
+        // Tail elements 2, 3: ta -> 0xFFFFFFFF
+        ExpectElements<uint32_t>(processor.registers_, 3, {0xFFFFFFFEu, 1u, 0xFFFFFFFFu, 0xFFFFFFFFu});
+    }
+
+    // Test 2: tail-undisturbed (ta = false) for vmul.vx
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vmul.vx v3, v1, x2 with vl = 2 < VLMAX (VLMAX = 4 for SEW=32)
+        // ta = false (tail-undisturbed)
+        LoadVectorVXProgram(processor, 32, 2, EncodeVectorVX(0b100101, 3, 1, 2, 1, 0b110), 5, 2, false, false);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {10, 20, 30, 40});
+        WriteElements<uint32_t>(processor.registers_, 3, {100, 200, 300, 400});
+
+        processor.Step();
+
+        // Elements 0, 1 active: 10 * 5 = 50, 20 * 5 = 100
+        // Tail elements 2, 3: undisturbed -> retain 300, 400
+        ExpectElements<uint32_t>(processor.registers_, 3, {50, 100, 300, 400});
+    }
+}
+
+TEST(VectorArithmeticTest, VectorMultiplyVstart)
+{
+    // Test 1: 0 < vstart < vl with vmul.vv
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorProgram(processor, 32, 4, EncodeVectorVV(0b100101, 3, 1, 2, 1, 0b010));
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 2);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {2, 3, 4, 5});
+        WriteElements<uint32_t>(processor.registers_, 2, {10, 20, 30, 40});
+        WriteElements<uint32_t>(processor.registers_, 3, {100, 200, 300, 400});
+
+        processor.Step();
+
+        // Elements 0, 1: prestart undisturbed -> retain 100, 200
+        // Elements 2, 3: active -> 4 * 30 = 120, 5 * 40 = 200
+        // vstart reset to 0
+        ExpectElements<uint32_t>(processor.registers_, 3, {100, 200, 120, 200});
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+
+    // Test 2: vstart == vl with vmul.vx -> no body elements executed, destination undisturbed, vstart reset to 0
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorVXProgram(processor, 32, 2, EncodeVectorVX(0b100101, 3, 1, 2, 1, 0b110), 10);
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 2);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {1, 2, 3, 4});
+        WriteElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+
+        processor.Step();
+
+        // Destination unchanged
+        ExpectElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+        // vstart reset to 0
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+
+    // Test 3: vstart > vl with vmulh.vv -> executes no elements, destination unchanged, vstart reset to 0
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorProgram(processor, 32, 2, EncodeVectorVV(0b100111, 3, 1, 2, 1, 0b010));
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 3);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {0x80000000, 0x40000000});
+        WriteElements<uint32_t>(processor.registers_, 2, {2, 2});
+        WriteElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+
+        processor.Step();
+
+        // Destination unchanged
+        ExpectElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+        // vstart reset to 0
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+}
+
+TEST(VectorArithmeticTest, VectorMultiplyAliasingAndHazardSafety)
+{
+    // Test 1: vd == vs2 (in-place multiply)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vmul.vx v1, v1, x2 (vd = 1, vs2 = 1, rs1 = 2)
+        LoadVectorVXProgram(processor, 32, 2, EncodeVectorVX(0b100101, 1, 1, 2, 1, 0b110), 3);
+        WriteElements<uint32_t>(processor.registers_, 1, {10, 20});
+
+        processor.Step();
+
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(1, 0), 30u);
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(1, 1), 60u);
+    }
+
+    // Test 2: vd == vs1 with vmul.vv (destination overwrites vs1)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vmul.vv v2, v1, v2 (vd = 2, vs2 = 1, vs1 = 2)
+        LoadVectorProgram(processor, 32, 2, EncodeVectorVV(0b100101, 2, 1, 2, 1, 0b010));
+        WriteElements<uint32_t>(processor.registers_, 1, {5, 6});
+        WriteElements<uint32_t>(processor.registers_, 2, {7, 8});
+
+        processor.Step();
+
+        // 5 * 7 = 35, 6 * 8 = 48
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(2, 0), 35u);
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(2, 1), 48u);
+    }
+
+    // Test 3: vd == v0 with vm = 0 (destination is mask register)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vmul.vx v0, v1, x2, v0.t (vd = 0, vs2 = 1, rs1 = 2, vm = 0)
+        LoadVectorVXProgram(processor, 32, 4, EncodeVectorVX(0b100101, 0, 1, 2, 0, 0b110), 3, 2, false, false);
+
+        // Initial mask in v0: bit 0=1, bit 1=1, bit 2=0, bit 3=1 -> 0x0B
+        processor.registers_.WriteVregElement<uint8_t>(0, 0, 0x0B);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {10, 20, 30, 40});
+        processor.registers_.WriteVregElement<uint32_t>(0, 1, 100);
+        processor.registers_.WriteVregElement<uint32_t>(0, 2, 200);
+        processor.registers_.WriteVregElement<uint32_t>(0, 3, 300);
+
+        processor.Step();
+
+        // Element 0: active -> 10 * 3 = 30
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(0, 0), 30u);
+        // Element 1: active -> 20 * 3 = 60
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(0, 1), 60u);
+        // Element 2: inactive (mask bit 2 was 0) -> retains 200
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(0, 2), 200u);
+        // Element 3: active -> 40 * 3 = 120
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(0, 3), 120u);
+    }
+}
+
+TEST(VectorArithmeticTest, VectorMultiplyUndoRedo)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    // vmulh.vv v3, v1, v2
+    LoadVectorProgram(processor, 32, 2, EncodeVectorVV(0b100111, 3, 1, 2, 1, 0b010));
+    processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 1);
+
+    WriteElements<uint32_t>(processor.registers_, 1, {0x80000000, 0x80000000});
+    WriteElements<uint32_t>(processor.registers_, 2, {0x80000000, 0x80000000});
+    WriteElements<uint32_t>(processor.registers_, 3, {100, 200});
+
+    // Step vmulh.vv: element 0 prestart preserved (100), element 1 -> INT32_MIN * INT32_MIN high = 0x40000000
+    processor.Step();
+    EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(3, 0), 100u);
+    EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(3, 1), 0x40000000u);
+    EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+
+    // Undo -> restores element 1 to 200, vstart to 1
+    processor.Undo();
+    EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(3, 0), 100u);
+    EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(3, 1), 200u);
+    EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 1u);
+
+    // Redo -> restores element 1 to 0x40000000, vstart to 0
+    processor.Redo();
+    EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(3, 0), 100u);
+    EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(3, 1), 0x40000000u);
+    EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+}
+
+// ---------------------------------------------------------
+// Batch 5: Vector Integer Division and Remainder Tests
+// ---------------------------------------------------------
+
+template <typename T>
+void TestDivisionVV(
+    uint32_t funct6,
+    const std::vector<T> &lhs,
+    const std::vector<T> &rhs,
+    const std::vector<T> &expected)
+{
+    TestMultiplyVV<T>(funct6, lhs, rhs, expected);
+}
+
+template <typename T>
+void TestDivisionVX(
+    uint32_t funct6,
+    const std::vector<T> &lhs,
+    uint64_t scalar_val,
+    const std::vector<T> &expected,
+    unsigned int avl = 0)
+{
+    TestMultiplyVX<T>(funct6, lhs, scalar_val, expected, avl);
+}
+
+TEST(VectorArithmeticTest, VdivBasicAllSEW)
+{
+    // vdiv.vv (funct6 = 0b100001, funct3 = 0b010)
+    // SEW = 8: 20 / 3 = 6, -20 / 3 = -6, 20 / -3 = -6, -20 / -3 = 6
+    TestDivisionVV<uint8_t>(0b100001,
+        {20, static_cast<uint8_t>(-20), 20, static_cast<uint8_t>(-20)},
+        {3, 3, static_cast<uint8_t>(-3), static_cast<uint8_t>(-3)},
+        {6, static_cast<uint8_t>(-6), static_cast<uint8_t>(-6), 6});
+
+    // SEW = 16: 1000 / 7 = 142, -1000 / 7 = -142
+    TestDivisionVV<uint16_t>(0b100001,
+        {1000, static_cast<uint16_t>(-1000)},
+        {7, 7},
+        {142, static_cast<uint16_t>(-142)});
+
+    // SEW = 32: 100000 / 10 = 10000, -100000 / 10 = -10000
+    TestDivisionVV<uint32_t>(0b100001,
+        {100000, static_cast<uint32_t>(-100000)},
+        {10, 10},
+        {10000, static_cast<uint32_t>(-10000)});
+
+    // SEW = 64: 1000000000000 / 1000 = 1000000000
+    TestDivisionVV<uint64_t>(0b100001,
+        {1000000000000ULL, static_cast<uint64_t>(-1000000000000LL)},
+        {1000, 1000},
+        {1000000000ULL, static_cast<uint64_t>(-1000000000LL)});
+
+    // vdiv.vx (funct6 = 0b100001, funct3 = 0b110)
+    TestDivisionVX<uint8_t>(0b100001, {20, static_cast<uint8_t>(-20)}, 3, {6, static_cast<uint8_t>(-6)});
+    TestDivisionVX<uint16_t>(0b100001, {1000, static_cast<uint16_t>(-1000)}, 7, {142, static_cast<uint16_t>(-142)});
+    TestDivisionVX<uint32_t>(0b100001, {100000, static_cast<uint32_t>(-100000)}, 10, {10000, static_cast<uint32_t>(-10000)});
+    TestDivisionVX<uint64_t>(0b100001, {1000000000000ULL, static_cast<uint64_t>(-1000000000000LL)}, 1000, {1000000000ULL, static_cast<uint64_t>(-1000000000LL)});
+}
+
+TEST(VectorArithmeticTest, VdivuBasicAllSEW)
+{
+    // vdivu.vv (funct6 = 0b100000, funct3 = 0b010)
+    // SEW = 8: 200 / 3 = 66, 20 / 3 = 6
+    TestDivisionVV<uint8_t>(0b100000, {200, 20}, {3, 3}, {66, 6});
+
+    // SEW = 16: 60000 / 7 = 8571, 1000 / 7 = 142
+    TestDivisionVV<uint16_t>(0b100000, {60000, 1000}, {7, 7}, {8571, 142});
+
+    // SEW = 32: 4000000000 / 10 = 400000000, 100000 / 10 = 10000
+    TestDivisionVV<uint32_t>(0b100000, {4000000000U, 100000}, {10, 10}, {400000000U, 10000});
+
+    // SEW = 64: 1000000000000 / 1000 = 1000000000
+    TestDivisionVV<uint64_t>(0b100000, {1000000000000ULL}, {1000}, {1000000000ULL});
+
+    // vdivu.vx (funct6 = 0b100000, funct3 = 0b110)
+    TestDivisionVX<uint8_t>(0b100000, {200, 20}, 3, {66, 6});
+    TestDivisionVX<uint16_t>(0b100000, {60000, 1000}, 7, {8571, 142});
+    TestDivisionVX<uint32_t>(0b100000, {4000000000U, 100000}, 10, {400000000U, 10000});
+    TestDivisionVX<uint64_t>(0b100000, {1000000000000ULL}, 1000, {1000000000ULL});
+}
+
+TEST(VectorArithmeticTest, VremBasicAllSEW)
+{
+    // vrem.vv (funct6 = 0b100011, funct3 = 0b010)
+    // Nonzero remainder sign matches the dividend:
+    // 20 % 3 = 2, -20 % 3 = -2, 20 % -3 = 2, -20 % -3 = -2
+    TestDivisionVV<uint8_t>(0b100011,
+        {20, static_cast<uint8_t>(-20), 20, static_cast<uint8_t>(-20)},
+        {3, 3, static_cast<uint8_t>(-3), static_cast<uint8_t>(-3)},
+        {2, static_cast<uint8_t>(-2), 2, static_cast<uint8_t>(-2)});
+
+    // SEW = 16: 1000 % 7 = 6, -1000 % 7 = -6
+    TestDivisionVV<uint16_t>(0b100011,
+        {1000, static_cast<uint16_t>(-1000)},
+        {7, 7},
+        {6, static_cast<uint16_t>(-6)});
+
+    // SEW = 32: 100005 % 10 = 5, -100005 % 10 = -5
+    TestDivisionVV<uint32_t>(0b100011,
+        {100005, static_cast<uint32_t>(-100005)},
+        {10, 10},
+        {5, static_cast<uint32_t>(-5)});
+
+    // SEW = 64: 1000000000007 % 1000 = 7, -1000000000007 % 1000 = -7
+    TestDivisionVV<uint64_t>(0b100011,
+        {1000000000007ULL, static_cast<uint64_t>(-1000000000007LL)},
+        {1000, 1000},
+        {7, static_cast<uint64_t>(-7)});
+
+    // vrem.vx (funct6 = 0b100011, funct3 = 0b110)
+    TestDivisionVX<uint8_t>(0b100011, {20, static_cast<uint8_t>(-20)}, 3, {2, static_cast<uint8_t>(-2)});
+    TestDivisionVX<uint16_t>(0b100011, {1000, static_cast<uint16_t>(-1000)}, 7, {6, static_cast<uint16_t>(-6)});
+    TestDivisionVX<uint32_t>(0b100011, {100005, static_cast<uint32_t>(-100005)}, 10, {5, static_cast<uint32_t>(-5)});
+    TestDivisionVX<uint64_t>(0b100011, {1000000000007ULL, static_cast<uint64_t>(-1000000000007LL)}, 1000, {7, static_cast<uint64_t>(-7)});
+}
+
+TEST(VectorArithmeticTest, VremuBasicAllSEW)
+{
+    // vremu.vv (funct6 = 0b100010, funct3 = 0b010)
+    // SEW = 8: 200 % 3 = 2, 20 % 3 = 2
+    TestDivisionVV<uint8_t>(0b100010, {200, 20}, {3, 3}, {2, 2});
+
+    // SEW = 16: 60000 % 7 = 3, 1000 % 7 = 6
+    TestDivisionVV<uint16_t>(0b100010, {60000, 1000}, {7, 7}, {3, 6});
+
+    // SEW = 32: 4000000005 % 10 = 5, 100005 % 10 = 5
+    TestDivisionVV<uint32_t>(0b100010, {4000000005U, 100005}, {10, 10}, {5, 5});
+
+    // SEW = 64: 1000000000007 % 1000 = 7
+    TestDivisionVV<uint64_t>(0b100010, {1000000000007ULL}, {1000}, {7});
+
+    // vremu.vx (funct6 = 0b100010, funct3 = 0b110)
+    TestDivisionVX<uint8_t>(0b100010, {200, 20}, 3, {2, 2});
+    TestDivisionVX<uint16_t>(0b100010, {60000, 1000}, 7, {3, 6});
+    TestDivisionVX<uint32_t>(0b100010, {4000000005U, 100005}, 10, {5, 5});
+    TestDivisionVX<uint64_t>(0b100010, {1000000000007ULL}, 1000, {7});
+}
+
+TEST(VectorArithmeticTest, VectorDivisionEdgeCasesAndOverflow)
+{
+    // -------------------------------------------------------------
+    // 1. Division and Remainder by Zero
+    // vdiv, vdivu return all ones (element_mask / -1)
+    // vrem, vremu return original dividend a
+    // -------------------------------------------------------------
+
+    // SEW = 8:
+    // vdiv.vv: dividend / 0 -> 0xFF (-1)
+    TestDivisionVV<uint8_t>(0b100001, {20, static_cast<uint8_t>(-20), 0}, {0, 0, 0}, {0xFF, 0xFF, 0xFF});
+    // vdiv.vx: dividend / 0 -> 0xFF (-1)
+    TestDivisionVX<uint8_t>(0b100001, {20, static_cast<uint8_t>(-20), 0}, 0, {0xFF, 0xFF, 0xFF});
+    // vdivu.vv: dividend / 0 -> 0xFF
+    TestDivisionVV<uint8_t>(0b100000, {200, 0}, {0, 0}, {0xFF, 0xFF});
+    // vdivu.vx: dividend / 0 -> 0xFF
+    TestDivisionVX<uint8_t>(0b100000, {200, 0}, 0, {0xFF, 0xFF});
+
+    // vrem.vv: dividend % 0 -> dividend
+    TestDivisionVV<uint8_t>(0b100011, {20, static_cast<uint8_t>(-20), 0}, {0, 0, 0}, {20, static_cast<uint8_t>(-20), 0});
+    // vrem.vx: dividend % 0 -> dividend
+    TestDivisionVX<uint8_t>(0b100011, {20, static_cast<uint8_t>(-20), 0}, 0, {20, static_cast<uint8_t>(-20), 0});
+    // vremu.vv: dividend % 0 -> dividend
+    TestDivisionVV<uint8_t>(0b100010, {200, 0}, {0, 0}, {200, 0});
+    // vremu.vx: dividend % 0 -> dividend
+    TestDivisionVX<uint8_t>(0b100010, {200, 0}, 0, {200, 0});
+
+    // SEW = 16:
+    TestDivisionVV<uint16_t>(0b100001, {1000, static_cast<uint16_t>(-1000)}, {0, 0}, {0xFFFF, 0xFFFF});
+    TestDivisionVX<uint16_t>(0b100001, {1000, static_cast<uint16_t>(-1000)}, 0, {0xFFFF, 0xFFFF});
+    TestDivisionVV<uint16_t>(0b100000, {50000, 0}, {0, 0}, {0xFFFF, 0xFFFF});
+    TestDivisionVX<uint16_t>(0b100000, {50000, 0}, 0, {0xFFFF, 0xFFFF});
+
+    TestDivisionVV<uint16_t>(0b100011, {1000, static_cast<uint16_t>(-1000)}, {0, 0}, {1000, static_cast<uint16_t>(-1000)});
+    TestDivisionVX<uint16_t>(0b100011, {1000, static_cast<uint16_t>(-1000)}, 0, {1000, static_cast<uint16_t>(-1000)});
+    TestDivisionVV<uint16_t>(0b100010, {50000, 0}, {0, 0}, {50000, 0});
+    TestDivisionVX<uint16_t>(0b100010, {50000, 0}, 0, {50000, 0});
+
+    // SEW = 32:
+    TestDivisionVV<uint32_t>(0b100001, {123456}, {0}, {0xFFFFFFFFu});
+    TestDivisionVX<uint32_t>(0b100001, {123456}, 0, {0xFFFFFFFFu});
+    TestDivisionVV<uint32_t>(0b100000, {123456}, {0}, {0xFFFFFFFFu});
+    TestDivisionVX<uint32_t>(0b100000, {123456}, 0, {0xFFFFFFFFu});
+
+    TestDivisionVV<uint32_t>(0b100011, {123456}, {0}, {123456});
+    TestDivisionVX<uint32_t>(0b100011, {123456}, 0, {123456});
+    TestDivisionVV<uint32_t>(0b100010, {123456}, {0}, {123456});
+    TestDivisionVX<uint32_t>(0b100010, {123456}, 0, {123456});
+
+    // SEW = 64:
+    TestDivisionVV<uint64_t>(0b100001, {1234567890123ULL}, {0}, {0xFFFFFFFFFFFFFFFFULL});
+    TestDivisionVX<uint64_t>(0b100001, {1234567890123ULL}, 0, {0xFFFFFFFFFFFFFFFFULL});
+    TestDivisionVV<uint64_t>(0b100000, {1234567890123ULL}, {0}, {0xFFFFFFFFFFFFFFFFULL});
+    TestDivisionVX<uint64_t>(0b100000, {1234567890123ULL}, 0, {0xFFFFFFFFFFFFFFFFULL});
+
+    TestDivisionVV<uint64_t>(0b100011, {1234567890123ULL}, {0}, {1234567890123ULL});
+    TestDivisionVX<uint64_t>(0b100011, {1234567890123ULL}, 0, {1234567890123ULL});
+    TestDivisionVV<uint64_t>(0b100010, {1234567890123ULL}, {0}, {1234567890123ULL});
+    TestDivisionVX<uint64_t>(0b100010, {1234567890123ULL}, 0, {1234567890123ULL});
+
+    // -------------------------------------------------------------
+    // 2. Signed Overflow (INT_MIN / -1 and INT_MIN % -1)
+    // In two's complement, INT_MIN / -1 overflows.
+    // RVV 1.0 requires vdiv to return INT_MIN and vrem to return 0.
+    // -------------------------------------------------------------
+
+    // SEW = 8: INT8_MIN = 0x80 (-128), -1 = 0xFF
+    TestDivisionVV<uint8_t>(0b100001, {0x80}, {0xFF}, {0x80});
+    TestDivisionVX<uint8_t>(0b100001, {0x80}, 0xFFFFFFFFFFFFFFFFULL, {0x80});
+    TestDivisionVV<uint8_t>(0b100011, {0x80}, {0xFF}, {0});
+    TestDivisionVX<uint8_t>(0b100011, {0x80}, 0xFFFFFFFFFFFFFFFFULL, {0});
+
+    // SEW = 16: INT16_MIN = 0x8000 (-32768), -1 = 0xFFFF
+    TestDivisionVV<uint16_t>(0b100001, {0x8000}, {0xFFFF}, {0x8000});
+    TestDivisionVX<uint16_t>(0b100001, {0x8000}, 0xFFFFFFFFFFFFFFFFULL, {0x8000});
+    TestDivisionVV<uint16_t>(0b100011, {0x8000}, {0xFFFF}, {0});
+    TestDivisionVX<uint16_t>(0b100011, {0x8000}, 0xFFFFFFFFFFFFFFFFULL, {0});
+
+    // SEW = 32: INT32_MIN = 0x80000000, -1 = 0xFFFFFFFF
+    TestDivisionVV<uint32_t>(0b100001, {0x80000000u}, {0xFFFFFFFFu}, {0x80000000u});
+    TestDivisionVX<uint32_t>(0b100001, {0x80000000u}, 0xFFFFFFFFFFFFFFFFULL, {0x80000000u});
+    TestDivisionVV<uint32_t>(0b100011, {0x80000000u}, {0xFFFFFFFFu}, {0});
+    TestDivisionVX<uint32_t>(0b100011, {0x80000000u}, 0xFFFFFFFFFFFFFFFFULL, {0});
+
+    // SEW = 64: INT64_MIN = 0x8000000000000000, -1 = 0xFFFFFFFFFFFFFFFF
+    TestDivisionVV<uint64_t>(0b100001, {0x8000000000000000ULL}, {0xFFFFFFFFFFFFFFFFULL}, {0x8000000000000000ULL});
+    TestDivisionVX<uint64_t>(0b100001, {0x8000000000000000ULL}, 0xFFFFFFFFFFFFFFFFULL, {0x8000000000000000ULL});
+    TestDivisionVV<uint64_t>(0b100011, {0x8000000000000000ULL}, {0xFFFFFFFFFFFFFFFFULL}, {0});
+    TestDivisionVX<uint64_t>(0b100011, {0x8000000000000000ULL}, 0xFFFFFFFFFFFFFFFFULL, {0});
+
+    // -------------------------------------------------------------
+    // 3. Division by 1, -1, and Division by Self
+    // -------------------------------------------------------------
+    TestDivisionVV<uint32_t>(0b100001, {42, static_cast<uint32_t>(-42)}, {1, 1}, {42, static_cast<uint32_t>(-42)});
+    TestDivisionVV<uint32_t>(0b100001, {42, static_cast<uint32_t>(-42)}, {static_cast<uint32_t>(-1), static_cast<uint32_t>(-1)}, {static_cast<uint32_t>(-42), 42});
+    TestDivisionVV<uint32_t>(0b100001, {42, static_cast<uint32_t>(-42)}, {42, static_cast<uint32_t>(-42)}, {1, 1});
+
+    TestDivisionVV<uint32_t>(0b100011, {42, static_cast<uint32_t>(-42)}, {1, 1}, {0, 0});
+    TestDivisionVV<uint32_t>(0b100011, {42, static_cast<uint32_t>(-42)}, {static_cast<uint32_t>(-1), static_cast<uint32_t>(-1)}, {0, 0});
+    TestDivisionVV<uint32_t>(0b100011, {42, static_cast<uint32_t>(-42)}, {42, static_cast<uint32_t>(-42)}, {0, 0});
+}
+
+TEST(VectorArithmeticTest, VectorDivisionScalarTruncationAndSignedness)
+{
+    // Verify that for all four .vx instructions (vdivu.vx, vdiv.vx, vremu.vx, vrem.vx),
+    // only the low SEW bits of the scalar GPR affect the result, and signedness
+    // interpretation strictly matches the instruction across SEW 8, 16, 32, and 64.
+
+    // -------------------------------------------------------------
+    // 1. vdivu.vx (funct6 = 0b100000, funct3 = 0b110)
+    // -------------------------------------------------------------
+    // SEW = 8: scalar has nonzero upper bits (0xDEADBEEF00000103 -> low 8 bits = 3 unsigned)
+    TestDivisionVX<uint8_t>(0b100000, {60, 200}, 0xDEADBEEF00000103ULL, {20, 66});
+    // SEW = 8: scalar has 0xFF (255 unsigned) in low 8 bits (0xAAAAAAAAAAAA01FF)
+    TestDivisionVX<uint8_t>(0b100000, {255, 100}, 0xAAAAAAAAAAAA01FFULL, {1, 0});
+
+    // SEW = 16: scalar has nonzero upper bits (0xCAFEBABE00010007 -> low 16 bits = 7 unsigned)
+    TestDivisionVX<uint16_t>(0b100000, {700, 60000}, 0xCAFEBABE00010007ULL, {100, 8571});
+    // SEW = 16: scalar has 0xFFFF (65535 unsigned) in low 16 bits (0xCAFEBABE0001FFFF)
+    TestDivisionVX<uint16_t>(0b100000, {65535, 30000}, 0xCAFEBABE0001FFFFULL, {1, 0});
+
+    // SEW = 32: scalar has nonzero upper bits (0xFEEDFACE0000000A -> low 32 bits = 10 unsigned)
+    TestDivisionVX<uint32_t>(0b100000, {500, 4000000000U}, 0xFEEDFACE0000000AULL, {50, 400000000U});
+    // SEW = 32: scalar has 0xFFFFFFFF (2^32-1 unsigned) in low 32 bits (0xFEEDFACEFFFFFFFF)
+    TestDivisionVX<uint32_t>(0b100000, {0xFFFFFFFFu, 1000}, 0xFEEDFACEFFFFFFFFULL, {1, 0});
+
+    // SEW = 64: full 64-bit scalar
+    TestDivisionVX<uint64_t>(0b100000, {5000ULL, 1000000000000ULL}, 10ULL, {500ULL, 100000000000ULL});
+
+    // -------------------------------------------------------------
+    // 2. vdiv.vx (funct6 = 0b100001, funct3 = 0b110)
+    // -------------------------------------------------------------
+    // SEW = 8: scalar has nonzero upper bits (0xDEADBEEF00000103 -> low 8 bits = 3 signed)
+    TestDivisionVX<uint8_t>(0b100001, {60, static_cast<uint8_t>(-60)}, 0xDEADBEEF00000103ULL, {20, static_cast<uint8_t>(-20)});
+    // SEW = 8: scalar low 8 bits = 0xFF (treated as signed -1!).
+    // 20 / -1 = -20 (0xEC). If treated as unsigned 255, 20 / 255 = 0.
+    TestDivisionVX<uint8_t>(0b100001, {20, static_cast<uint8_t>(-20), 0x80}, 0xAAAAAAAAAAAA01FFULL,
+        {static_cast<uint8_t>(-20), 20, 0x80}); // 0x80 is INT8_MIN / -1 -> INT8_MIN
+
+    // SEW = 16: scalar low 16 bits = 7 signed
+    TestDivisionVX<uint16_t>(0b100001, {700, static_cast<uint16_t>(-700)}, 0xCAFEBABE00010007ULL, {100, static_cast<uint16_t>(-100)});
+    // SEW = 16: scalar low 16 bits = 0xFFFF (treated as signed -1!).
+    TestDivisionVX<uint16_t>(0b100001, {100, static_cast<uint16_t>(-100), 0x8000}, 0xCAFEBABE0001FFFFULL,
+        {static_cast<uint16_t>(-100), 100, 0x8000});
+
+    // SEW = 32: scalar low 32 bits = 10 signed
+    TestDivisionVX<uint32_t>(0b100001, {500, static_cast<uint32_t>(-500)}, 0xFEEDFACE0000000AULL, {50, static_cast<uint32_t>(-50)});
+    // SEW = 32: scalar low 32 bits = 0xFFFFFFFF (treated as signed -1!).
+    TestDivisionVX<uint32_t>(0b100001, {1000, static_cast<uint32_t>(-1000), 0x80000000u}, 0xFEEDFACEFFFFFFFFULL,
+        {static_cast<uint32_t>(-1000), 1000, 0x80000000u});
+
+    // SEW = 64: full 64-bit signed scalar (-10LL)
+    TestDivisionVX<uint64_t>(0b100001, {5000ULL, static_cast<uint64_t>(-5000LL)}, static_cast<uint64_t>(-10LL),
+        {static_cast<uint64_t>(-500LL), 500ULL});
+
+    // -------------------------------------------------------------
+    // 3. vremu.vx (funct6 = 0b100010, funct3 = 0b110)
+    // -------------------------------------------------------------
+    // SEW = 8: scalar low 8 bits = 3 unsigned
+    TestDivisionVX<uint8_t>(0b100010, {20, 200}, 0xDEADBEEF00000103ULL, {2, 2});
+    // SEW = 8: scalar low 8 bits = 255 unsigned. 200 % 255 = 200
+    TestDivisionVX<uint8_t>(0b100010, {200, 255}, 0xAAAAAAAAAAAA01FFULL, {200, 0});
+
+    // SEW = 16: scalar low 16 bits = 7 unsigned
+    TestDivisionVX<uint16_t>(0b100010, {1000, 60000}, 0xCAFEBABE00010007ULL, {6, 3});
+    // SEW = 16: scalar low 16 bits = 65535 unsigned. 60000 % 65535 = 60000
+    TestDivisionVX<uint16_t>(0b100010, {60000, 65535}, 0xCAFEBABE0001FFFFULL, {60000, 0});
+
+    // SEW = 32: scalar low 32 bits = 10 unsigned
+    TestDivisionVX<uint32_t>(0b100010, {100005, 4000000005U}, 0xFEEDFACE0000000AULL, {5, 5});
+    // SEW = 32: scalar low 32 bits = 2^32-1 unsigned. 1000 % (2^32-1) = 1000
+    TestDivisionVX<uint32_t>(0b100010, {1000, 0xFFFFFFFFu}, 0xFEEDFACEFFFFFFFFULL, {1000, 0});
+
+    // SEW = 64: full 64-bit scalar (1000ULL)
+    TestDivisionVX<uint64_t>(0b100010, {1000000000007ULL}, 1000ULL, {7});
+
+    // -------------------------------------------------------------
+    // 4. vrem.vx (funct6 = 0b100011, funct3 = 0b110)
+    // -------------------------------------------------------------
+    // SEW = 8: scalar low 8 bits = 3 signed. Remainder sign matches dividend.
+    TestDivisionVX<uint8_t>(0b100011, {20, static_cast<uint8_t>(-20)}, 0xDEADBEEF00000103ULL, {2, static_cast<uint8_t>(-2)});
+    // SEW = 8: scalar low 8 bits = 0xFF (treated as signed -1!). 20 % -1 = 0.
+    // If treated as unsigned 255, 20 % 255 = 20 != 0.
+    TestDivisionVX<uint8_t>(0b100011, {20, static_cast<uint8_t>(-20), 0x80}, 0xAAAAAAAAAAAA01FFULL, {0, 0, 0});
+
+    // SEW = 16: scalar low 16 bits = 7 signed
+    TestDivisionVX<uint16_t>(0b100011, {1000, static_cast<uint16_t>(-1000)}, 0xCAFEBABE00010007ULL, {6, static_cast<uint16_t>(-6)});
+    // SEW = 16: scalar low 16 bits = 0xFFFF (treated as signed -1!). 100 % -1 = 0
+    TestDivisionVX<uint16_t>(0b100011, {100, static_cast<uint16_t>(-100), 0x8000}, 0xCAFEBABE0001FFFFULL, {0, 0, 0});
+
+    // SEW = 32: scalar low 32 bits = 10 signed
+    TestDivisionVX<uint32_t>(0b100011, {100005, static_cast<uint32_t>(-100005)}, 0xFEEDFACE0000000AULL, {5, static_cast<uint32_t>(-5)});
+    // SEW = 32: scalar low 32 bits = 0xFFFFFFFF (treated as signed -1!). 1000 % -1 = 0
+    TestDivisionVX<uint32_t>(0b100011, {1000, static_cast<uint32_t>(-1000), 0x80000000u}, 0xFEEDFACEFFFFFFFFULL, {0, 0, 0});
+
+    // SEW = 64: full 64-bit scalar (1000ULL)
+    TestDivisionVX<uint64_t>(0b100011, {1000000000007ULL, static_cast<uint64_t>(-1000000000007LL)}, 1000ULL,
+        {7, static_cast<uint64_t>(-7)});
+}
+
+TEST(VectorArithmeticTest, VectorDivisionMaskingAndPolicies)
+{
+    // Test 1: vdiv.vv masked with mu (mask-undisturbed, inactive elements retain original destination value)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vdiv.vv v3, v1, v2, v0.t (vm = 0, funct3 = 0b010, ta = false, ma = false)
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(32, false, false),
+            EncodeVectorVV(0b100001, 3, 1, 2, 0, 0b010)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 4);
+        processor.Step(); // configure vtype/vl
+
+        // Mask in v0: bit 0 = 0, bit 1 = 1, bit 2 = 0, bit 3 = 1 -> 0b00001010
+        processor.registers_.WriteVregElement<uint8_t>(0, 0, 0b00001010);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {100, 100, 100, static_cast<uint32_t>(-80)});
+        WriteElements<uint32_t>(processor.registers_, 2, {5, 5, 5, 4});
+        WriteElements<uint32_t>(processor.registers_, 3, {111, 222, 333, 444});
+
+        processor.Step();
+
+        // Element 0: inactive -> retains 111
+        // Element 1: active -> 100 / 5 = 20
+        // Element 2: inactive -> retains 333
+        // Element 3: active -> -80 / 4 = -20 = 0xFFFFFFEC
+        ExpectElements<uint32_t>(processor.registers_, 3, {111u, 20u, 333u, static_cast<uint32_t>(-20)});
+    }
+
+    // Test 2: vrem.vx masked with ma (mask-agnostic, inactive elements filled with 1s)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vrem.vx v3, v1, x2, v0.t (vm = 0, funct3 = 0b110, ta = false, ma = true)
+        LoadVectorVXProgram(processor, 32, 4, EncodeVectorVX(0b100011, 3, 1, 2, 0, 0b110), 10, 2, false, true);
+
+        // Mask in v0: bit 0 = 1, bit 1 = 0, bit 2 = 1, bit 3 = 0 -> 0b00000101
+        processor.registers_.WriteVregElement<uint8_t>(0, 0, 0b00000101);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {23, 34, 47, 58});
+        WriteElements<uint32_t>(processor.registers_, 3, {100, 200, 300, 400});
+
+        processor.Step();
+
+        // Element 0: active -> 23 % 10 = 3
+        // Element 1: inactive, ma -> 0xFFFFFFFF
+        // Element 2: active -> 47 % 10 = 7
+        // Element 3: inactive, ma -> 0xFFFFFFFF
+        ExpectElements<uint32_t>(processor.registers_, 3, {3u, 0xFFFFFFFFu, 7u, 0xFFFFFFFFu});
+    }
+}
+
+TEST(VectorArithmeticTest, VectorDivisionTailPolicy)
+{
+    // Test 1: tail-agnostic (ta = true) for vdivu.vv
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vdivu.vv v3, v1, v2 with vl = 2 < VLMAX (VLMAX = 4 for SEW=32)
+        // ta = true (tail-agnostic)
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(32, true, false),
+            EncodeVectorVV(0b100000, 3, 1, 2, 1, 0b010)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 2);
+        processor.Step(); // configure vtype/vl
+
+        WriteElements<uint32_t>(processor.registers_, 1, {100, 200, 10, 20});
+        WriteElements<uint32_t>(processor.registers_, 2, {10, 20, 10, 20});
+        WriteElements<uint32_t>(processor.registers_, 3, {111, 222, 333, 444});
+
+        processor.Step();
+
+        // Elements 0, 1 active: 100 / 10 = 10, 200 / 20 = 10
+        // Tail elements 2, 3: ta -> 0xFFFFFFFF
+        ExpectElements<uint32_t>(processor.registers_, 3, {10u, 10u, 0xFFFFFFFFu, 0xFFFFFFFFu});
+    }
+
+    // Test 2: tail-undisturbed (ta = false) for vremu.vx
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vremu.vx v3, v1, x2 with vl = 2 < VLMAX (VLMAX = 4 for SEW=32)
+        // ta = false (tail-undisturbed)
+        LoadVectorVXProgram(processor, 32, 2, EncodeVectorVX(0b100010, 3, 1, 2, 1, 0b110), 10, 2, false, false);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {55, 66, 77, 88});
+        WriteElements<uint32_t>(processor.registers_, 3, {100, 200, 300, 400});
+
+        processor.Step();
+
+        // Elements 0, 1 active: 55 % 10 = 5, 66 % 10 = 6
+        // Tail elements 2, 3: undisturbed -> retain 300, 400
+        ExpectElements<uint32_t>(processor.registers_, 3, {5u, 6u, 300u, 400u});
+    }
+}
+
+TEST(VectorArithmeticTest, VectorDivisionVstart)
+{
+    // Test 1: 0 < vstart < vl with vdiv.vv
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorProgram(processor, 32, 4, EncodeVectorVV(0b100001, 3, 1, 2, 1, 0b010));
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 2);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {100, 200, 80, 90});
+        WriteElements<uint32_t>(processor.registers_, 2, {10, 20, 4, 3});
+        WriteElements<uint32_t>(processor.registers_, 3, {111, 222, 333, 444});
+
+        processor.Step();
+
+        // Elements 0, 1: prestart undisturbed -> retain 111, 222
+        // Elements 2, 3: active -> 80 / 4 = 20, 90 / 3 = 30
+        // vstart reset to 0
+        ExpectElements<uint32_t>(processor.registers_, 3, {111u, 222u, 20u, 30u});
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+
+    // Test 2: vstart == vl with vdiv.vx -> no body elements executed, destination undisturbed, vstart reset to 0
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorVXProgram(processor, 32, 2, EncodeVectorVX(0b100001, 3, 1, 2, 1, 0b110), 10);
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 2);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {10, 20, 30, 40});
+        WriteElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+
+        processor.Step();
+
+        // Destination unchanged
+        ExpectElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+        // vstart reset to 0
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+
+    // Test 3: vstart > vl with vrem.vv -> executes no elements, destination unchanged, vstart reset to 0
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorProgram(processor, 32, 2, EncodeVectorVV(0b100011, 3, 1, 2, 1, 0b010));
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 3);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {100, 200});
+        WriteElements<uint32_t>(processor.registers_, 2, {10, 20});
+        WriteElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+
+        processor.Step();
+
+        // Destination unchanged
+        ExpectElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+        // vstart reset to 0
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+}
+
+TEST(VectorArithmeticTest, VectorDivisionAliasingAndHazardSafety)
+{
+    // Test 1: vd == vs2 (in-place division)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vdiv.vx v1, v1, x2 (vd = 1, vs2 = 1, rs1 = 2)
+        LoadVectorVXProgram(processor, 32, 2, EncodeVectorVX(0b100001, 1, 1, 2, 1, 0b110), 3);
+        WriteElements<uint32_t>(processor.registers_, 1, {30, 60});
+
+        processor.Step();
+
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(1, 0), 10u);
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(1, 1), 20u);
+    }
+
+    // Test 2: vd == vs1 with vdiv.vv (destination overwrites vs1)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vdiv.vv v2, v1, v2 (vd = 2, vs2 = 1, vs1 = 2)
+        LoadVectorProgram(processor, 32, 2, EncodeVectorVV(0b100001, 2, 1, 2, 1, 0b010));
+        WriteElements<uint32_t>(processor.registers_, 1, {50, 60});
+        WriteElements<uint32_t>(processor.registers_, 2, {5, 6});
+
+        processor.Step();
+
+        // 50 / 5 = 10, 60 / 6 = 10
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(2, 0), 10u);
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(2, 1), 10u);
+    }
+
+    // Test 3: vd == v0 with vm = 0 (destination is mask register)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vdiv.vx v0, v1, x2, v0.t (vd = 0, vs2 = 1, rs1 = 2, vm = 0)
+        LoadVectorVXProgram(processor, 32, 4, EncodeVectorVX(0b100001, 0, 1, 2, 0, 0b110), 10, 2, false, false);
+
+        // Initial mask in v0: bit 0=1, bit 1=1, bit 2=0, bit 3=1 -> 0x0B
+        processor.registers_.WriteVregElement<uint8_t>(0, 0, 0x0B);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {100, 200, 300, 400});
+        processor.registers_.WriteVregElement<uint32_t>(0, 1, 100);
+        processor.registers_.WriteVregElement<uint32_t>(0, 2, 200);
+        processor.registers_.WriteVregElement<uint32_t>(0, 3, 300);
+
+        processor.Step();
+
+        // Element 0: active -> 100 / 10 = 10
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(0, 0), 10u);
+        // Element 1: active -> 200 / 10 = 20
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(0, 1), 20u);
+        // Element 2: inactive (mask bit 2 was 0) -> retains 200
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(0, 2), 200u);
+        // Element 3: active -> 400 / 10 = 40
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(0, 3), 40u);
+    }
+}
+
+TEST(VectorArithmeticTest, VectorDivisionUndoRedo)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    // vdiv.vv v3, v1, v2
+    LoadVectorProgram(processor, 32, 2, EncodeVectorVV(0b100001, 3, 1, 2, 1, 0b010));
+    processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 1);
+
+    WriteElements<uint32_t>(processor.registers_, 1, {100, 200});
+    WriteElements<uint32_t>(processor.registers_, 2, {10, 4});
+    WriteElements<uint32_t>(processor.registers_, 3, {555, 666});
+
+    // Step vdiv.vv: element 0 prestart preserved (555), element 1 -> 200 / 4 = 50
+    processor.Step();
+    EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(3, 0), 555u);
+    EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(3, 1), 50u);
+    EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+
+    // Undo -> restores element 1 to 666, vstart to 1
+    processor.Undo();
+    EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(3, 0), 555u);
+    EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(3, 1), 666u);
+    EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 1u);
+
+    // Redo -> restores element 1 to 50, vstart to 0
+    processor.Redo();
+    EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(3, 0), 555u);
+    EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(3, 1), 50u);
+    EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+}
+
+TEST(VectorArithmeticTest, VstartGreaterThanOrEqualToVLTailAgnosticAndUndoRedo)
+{
+    // Test 1: vstart == vl with tail-agnostic (ta = true)
+    // Destination must remain unchanged (no tail elements overwritten),
+    // vstart must become zero, and Undo/Redo must work correctly.
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // SEW = 32, AVL = 2 (vl = 2 < VLMAX = 4), ta = true, ma = false
+        // vdiv.vv v3, v1, v2
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(32, true, false),
+            EncodeVectorVV(0b100001, 3, 1, 2, 1, 0b010)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 2);
+        processor.Step(); // configure vtype/vl
+
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 2); // vstart == vl
+
+        WriteElements<uint32_t>(processor.registers_, 1, {100, 200, 300, 400});
+        WriteElements<uint32_t>(processor.registers_, 2, {10, 20, 30, 40});
+        WriteElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+
+        processor.Step();
+
+        // When vstart >= vl, no elements (including tail elements) are updated
+        ExpectElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+        // vstart is reset to 0
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+
+        // Undo -> destination still unchanged, vstart restored to 2
+        processor.Undo();
+        ExpectElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 2u);
+
+        // Redo -> destination still unchanged, vstart reset to 0
+        processor.Redo();
+        ExpectElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+
+    // Test 2: vstart > vl with tail-agnostic (ta = true)
+    // Destination must remain unchanged (no tail elements overwritten),
+    // vstart must become zero, and Undo/Redo must work correctly.
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // SEW = 32, AVL = 2 (vl = 2 < VLMAX = 4), ta = true, ma = false
+        // vrem.vv v3, v1, v2
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(32, true, false),
+            EncodeVectorVV(0b100011, 3, 1, 2, 1, 0b010)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 2);
+        processor.Step(); // configure vtype/vl
+
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 3); // vstart > vl
+
+        WriteElements<uint32_t>(processor.registers_, 1, {100, 200, 300, 400});
+        WriteElements<uint32_t>(processor.registers_, 2, {10, 20, 30, 40});
+        WriteElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+
+        processor.Step();
+
+        // When vstart >= vl, no elements (including tail elements) are updated
+        ExpectElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+        // vstart is reset to 0
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+
+        // Undo -> destination still unchanged, vstart restored to 3
+        processor.Undo();
+        ExpectElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 3u);
+
+        // Redo -> destination still unchanged, vstart reset to 0
+        processor.Redo();
+        ExpectElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
 }

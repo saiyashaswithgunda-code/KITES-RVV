@@ -202,10 +202,27 @@ void RVSSProcessor::Execute()
         ExecuteVectorMemory();
         return;
     }
-    // Handle vector reduction instructions.
+    // Handle vector reduction and OPMVV instructions.
     if (opcode == 0x57 && funct3 == 0b010)
     {
-        ExecuteVectorReduction();
+        const uint8_t funct6 = (current_instruction_ >> 26) & 0x3F;
+        if (funct6 == 0b000000)
+        {
+            ExecuteVectorReduction();
+        }
+        else if (funct6 == 0b100100 || funct6 == 0b100101 ||
+                 funct6 == 0b100110 || funct6 == 0b100111 ||
+                 funct6 == 0b100000 || funct6 == 0b100001 ||
+                 funct6 == 0b100010 || funct6 == 0b100011)
+        {
+            ExecuteVectorArithmetic();
+        }
+        return;
+    }
+    // Handle OPMVX instructions (vector-scalar multiply).
+    if (opcode == 0x57 && funct3 == 0b110)
+    {
+        ExecuteVectorArithmetic();
         return;
     }
 
@@ -548,6 +565,42 @@ void RVSSProcessor::ExecuteVectorArithmetic()
             return;
         }
     }
+    else if (funct3 == 0b010)
+    {
+        switch (funct6)
+        {
+        case 0b100000: // vdivu.vv
+        case 0b100001: // vdiv.vv
+        case 0b100010: // vremu.vv
+        case 0b100011: // vrem.vv
+        case 0b100100: // vmulhu.vv
+        case 0b100101: // vmul.vv
+        case 0b100110: // vmulhsu.vv
+        case 0b100111: // vmulh.vv
+            break;
+
+        default:
+            return;
+        }
+    }
+    else if (funct3 == 0b110)
+    {
+        switch (funct6)
+        {
+        case 0b100000: // vdivu.vx
+        case 0b100001: // vdiv.vx
+        case 0b100010: // vremu.vx
+        case 0b100011: // vrem.vx
+        case 0b100100: // vmulhu.vx
+        case 0b100101: // vmul.vx
+        case 0b100110: // vmulhsu.vx
+        case 0b100111: // vmulh.vx
+            break;
+
+        default:
+            return;
+        }
+    }
     else
     {
         return;
@@ -565,7 +618,7 @@ void RVSSProcessor::ExecuteVectorArithmetic()
     const VectorConfig config = DecodeVectorConfig(vtype);
 
     if (config.vill || config.sew_bits == 0 ||
-        vl > config.vlmax || vstart > vl)
+        vl > config.vlmax)
     {
         return;
     }
@@ -573,12 +626,18 @@ void RVSSProcessor::ExecuteVectorArithmetic()
     vector_old_value_ = registers_.ReadVreg(vector_vd_);
     vector_new_value_ = vector_old_value_;
 
+    if (vstart >= vl)
+    {
+        vector_arithmetic_pending_ = true;
+        return;
+    }
+
     // Snapshot v0 before modifying the destination.
     const RegisterFile::VectorRegister mask_register =
         registers_.ReadVreg(0);
 
     const RegisterFile::VectorRegister source1 =
-        (funct3 == 0b000) ? registers_.ReadVreg(vs1) : RegisterFile::VectorRegister{};
+        (funct3 == 0b000 || funct3 == 0b010) ? registers_.ReadVreg(vs1) : RegisterFile::VectorRegister{};
 
     const RegisterFile::VectorRegister source2 =
         registers_.ReadVreg(vs2);
@@ -620,9 +679,9 @@ void RVSSProcessor::ExecuteVectorArithmetic()
             ? UINT64_MAX
             : ((1ULL << config.sew_bits) - 1);
 
-    // For OP-IVX: extract the scalar operand and mask/truncate to the active SEW.
+    // For OP-IVX and OP-MVX: extract the scalar operand and mask/truncate to the active SEW.
     const uint64_t scalar_val =
-        (funct3 == 0b100) ? (registers_.ReadGpr(vs1) & element_mask) : 0;
+        (funct3 == 0b100 || funct3 == 0b110) ? (registers_.ReadGpr(vs1) & element_mask) : 0;
 
     // For OP-IVI: extract 5-bit immediate.
     // For shifts (vsll, vsrl, vsra): uimm5 is unsigned (zero-extended).
@@ -700,6 +759,218 @@ void RVSSProcessor::ExecuteVectorArithmetic()
         }
     };
 
+    auto multiply_high_unsigned = [](uint64_t a, uint64_t b, unsigned int sew_bits) -> uint64_t
+    {
+        switch (sew_bits)
+        {
+        case 8: {
+            const uint16_t p = static_cast<uint16_t>(static_cast<uint8_t>(a)) *
+                               static_cast<uint16_t>(static_cast<uint8_t>(b));
+            return static_cast<uint8_t>(p >> 8);
+        }
+        case 16: {
+            const uint32_t p = static_cast<uint32_t>(static_cast<uint16_t>(a)) *
+                               static_cast<uint32_t>(static_cast<uint16_t>(b));
+            return static_cast<uint16_t>(p >> 16);
+        }
+        case 32: {
+            const uint64_t p = static_cast<uint64_t>(static_cast<uint32_t>(a)) *
+                               static_cast<uint64_t>(static_cast<uint32_t>(b));
+            return static_cast<uint32_t>(p >> 32);
+        }
+        case 64: {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+            const unsigned __int128 p = static_cast<unsigned __int128>(a) *
+                                        static_cast<unsigned __int128>(b);
+            return static_cast<uint64_t>(p >> 64);
+#pragma GCC diagnostic pop
+        }
+        default:
+            return 0;
+        }
+    };
+
+    auto multiply_high_signed = [](uint64_t a, uint64_t b, unsigned int sew_bits) -> uint64_t
+    {
+        switch (sew_bits)
+        {
+        case 8: {
+            const int16_t sa = std::bit_cast<int8_t>(static_cast<uint8_t>(a));
+            const int16_t sb = std::bit_cast<int8_t>(static_cast<uint8_t>(b));
+            const int16_t p = sa * sb;
+            return static_cast<uint8_t>(static_cast<int8_t>(p >> 8));
+        }
+        case 16: {
+            const int32_t sa = std::bit_cast<int16_t>(static_cast<uint16_t>(a));
+            const int32_t sb = std::bit_cast<int16_t>(static_cast<uint16_t>(b));
+            const int32_t p = sa * sb;
+            return static_cast<uint16_t>(static_cast<int16_t>(p >> 16));
+        }
+        case 32: {
+            const int64_t sa = std::bit_cast<int32_t>(static_cast<uint32_t>(a));
+            const int64_t sb = std::bit_cast<int32_t>(static_cast<uint32_t>(b));
+            const int64_t p = sa * sb;
+            return static_cast<uint32_t>(static_cast<int32_t>(p >> 32));
+        }
+        case 64: {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+            const __int128 sa = std::bit_cast<int64_t>(a);
+            const __int128 sb = std::bit_cast<int64_t>(b);
+            const __int128 p = sa * sb;
+            return static_cast<uint64_t>(p >> 64);
+#pragma GCC diagnostic pop
+        }
+        default:
+            return 0;
+        }
+    };
+
+    auto multiply_high_signed_unsigned = [](uint64_t a, uint64_t b, unsigned int sew_bits) -> uint64_t
+    {
+        switch (sew_bits)
+        {
+        case 8: {
+            const int32_t sa = std::bit_cast<int8_t>(static_cast<uint8_t>(a));
+            const int32_t ub = static_cast<uint8_t>(b);
+            const int32_t p = sa * ub;
+            return static_cast<uint8_t>(static_cast<int8_t>(p >> 8));
+        }
+        case 16: {
+            const int32_t sa = std::bit_cast<int16_t>(static_cast<uint16_t>(a));
+            const int32_t ub = static_cast<uint16_t>(b);
+            const int32_t p = sa * ub;
+            return static_cast<uint16_t>(static_cast<int16_t>(p >> 16));
+        }
+        case 32: {
+            const int64_t sa = std::bit_cast<int32_t>(static_cast<uint32_t>(a));
+            const int64_t ub = static_cast<uint32_t>(b);
+            const int64_t p = sa * ub;
+            return static_cast<uint32_t>(static_cast<int32_t>(p >> 32));
+        }
+        case 64: {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+            const __int128 sa = std::bit_cast<int64_t>(a);
+            const __int128 ub = static_cast<__int128>(static_cast<unsigned __int128>(b));
+            const __int128 p = sa * ub;
+            return static_cast<uint64_t>(p >> 64);
+#pragma GCC diagnostic pop
+        }
+        default:
+            return 0;
+        }
+    };
+
+    auto divide_unsigned = [element_mask](uint64_t a, uint64_t b) -> uint64_t
+    {
+        if (b == 0)
+        {
+            return element_mask;
+        }
+        return (a / b) & element_mask;
+    };
+
+    auto remainder_unsigned = [element_mask](uint64_t a, uint64_t b) -> uint64_t
+    {
+        if (b == 0)
+        {
+            return a & element_mask;
+        }
+        return (a % b) & element_mask;
+    };
+
+    auto divide_signed = [element_mask](uint64_t a, uint64_t b, unsigned int sew_bits) -> uint64_t
+    {
+        switch (sew_bits)
+        {
+        case 8: {
+            const auto sa = std::bit_cast<int8_t>(static_cast<uint8_t>(a));
+            const auto sb = std::bit_cast<int8_t>(static_cast<uint8_t>(b));
+            if (sb == 0)
+                return element_mask;
+            if (sa == INT8_MIN && sb == -1)
+                return static_cast<uint8_t>(INT8_MIN);
+            return static_cast<uint8_t>(static_cast<int8_t>(sa / sb));
+        }
+        case 16: {
+            const auto sa = std::bit_cast<int16_t>(static_cast<uint16_t>(a));
+            const auto sb = std::bit_cast<int16_t>(static_cast<uint16_t>(b));
+            if (sb == 0)
+                return element_mask;
+            if (sa == INT16_MIN && sb == -1)
+                return static_cast<uint16_t>(INT16_MIN);
+            return static_cast<uint16_t>(static_cast<int16_t>(sa / sb));
+        }
+        case 32: {
+            const auto sa = std::bit_cast<int32_t>(static_cast<uint32_t>(a));
+            const auto sb = std::bit_cast<int32_t>(static_cast<uint32_t>(b));
+            if (sb == 0)
+                return element_mask;
+            if (sa == INT32_MIN && sb == -1)
+                return static_cast<uint32_t>(INT32_MIN);
+            return static_cast<uint32_t>(sa / sb);
+        }
+        case 64: {
+            const auto sa = std::bit_cast<int64_t>(a);
+            const auto sb = std::bit_cast<int64_t>(b);
+            if (sb == 0)
+                return element_mask;
+            if (sa == INT64_MIN && sb == -1)
+                return static_cast<uint64_t>(INT64_MIN);
+            return static_cast<uint64_t>(sa / sb);
+        }
+        default:
+            return 0;
+        }
+    };
+
+    auto remainder_signed = [](uint64_t a, uint64_t b, unsigned int sew_bits) -> uint64_t
+    {
+        switch (sew_bits)
+        {
+        case 8: {
+            const auto sa = std::bit_cast<int8_t>(static_cast<uint8_t>(a));
+            const auto sb = std::bit_cast<int8_t>(static_cast<uint8_t>(b));
+            if (sb == 0)
+                return static_cast<uint8_t>(sa);
+            if (sa == INT8_MIN && sb == -1)
+                return 0;
+            return static_cast<uint8_t>(static_cast<int8_t>(sa % sb));
+        }
+        case 16: {
+            const auto sa = std::bit_cast<int16_t>(static_cast<uint16_t>(a));
+            const auto sb = std::bit_cast<int16_t>(static_cast<uint16_t>(b));
+            if (sb == 0)
+                return static_cast<uint16_t>(sa);
+            if (sa == INT16_MIN && sb == -1)
+                return 0;
+            return static_cast<uint16_t>(static_cast<int16_t>(sa % sb));
+        }
+        case 32: {
+            const auto sa = std::bit_cast<int32_t>(static_cast<uint32_t>(a));
+            const auto sb = std::bit_cast<int32_t>(static_cast<uint32_t>(b));
+            if (sb == 0)
+                return static_cast<uint32_t>(sa);
+            if (sa == INT32_MIN && sb == -1)
+                return 0;
+            return static_cast<uint32_t>(sa % sb);
+        }
+        case 64: {
+            const auto sa = std::bit_cast<int64_t>(a);
+            const auto sb = std::bit_cast<int64_t>(b);
+            if (sb == 0)
+                return static_cast<uint64_t>(sa);
+            if (sa == INT64_MIN && sb == -1)
+                return 0;
+            return static_cast<uint64_t>(sa % sb);
+        }
+        default:
+            return 0;
+        }
+    };
+
     // Process active vector elements.
     for (uint64_t i = vstart; i < vl; i++)
     {
@@ -729,74 +1000,114 @@ void RVSSProcessor::ExecuteVectorArithmetic()
             read_element(source2, i, element_bytes);
 
         const uint64_t b =
-            (funct3 == 0b100) ? scalar_val :
+            (funct3 == 0b100 || funct3 == 0b110) ? scalar_val :
             (funct3 == 0b011) ? imm_val :
                                 read_element(source1, i, element_bytes);
 
         uint64_t result = 0;
 
-        switch (funct6)
+        if (funct3 == 0b010 || funct3 == 0b110)
         {
-        case 0b000000:
-            result = a + b;
-            break;
+            switch (funct6)
+            {
+            case 0b100000: // vdivu
+                result = divide_unsigned(a, b);
+                break;
 
-        case 0b000010:
-            result = a - b;
-            break;
+            case 0b100001: // vdiv
+                result = divide_signed(a, b, config.sew_bits);
+                break;
 
-        case 0b000011: // vrsub
-            result = b - a;
-            break;
+            case 0b100010: // vremu
+                result = remainder_unsigned(a, b);
+                break;
 
-        case 0b000100: // vminu
-            result = (a < b) ? a : b;
-            break;
+            case 0b100011: // vrem
+                result = remainder_signed(a, b, config.sew_bits);
+                break;
 
-        case 0b000101: // vmin
-            result = signed_less(a, b, config.sew_bits) ? a : b;
-            break;
+            case 0b100100: // vmulhu
+                result = multiply_high_unsigned(a, b, config.sew_bits);
+                break;
 
-        case 0b000110: // vmaxu
-            result = (a > b) ? a : b;
-            break;
+            case 0b100101: // vmul
+                result = (a * b) & element_mask;
+                break;
 
-        case 0b000111: // vmax
-            result = signed_less(b, a, config.sew_bits) ? a : b;
-            break;
+            case 0b100110: // vmulhsu
+                result = multiply_high_signed_unsigned(a, b, config.sew_bits);
+                break;
 
-        case 0b001001:
-            result = a & b;
-            break;
-
-        case 0b001010:
-            result = a | b;
-            break;
-
-        case 0b001011:
-            result = a ^ b;
-            break;
-
-        case 0b100101: { // vsll
-            const unsigned int shamt =
-                static_cast<unsigned int>(b & (config.sew_bits - 1));
-            result = a << shamt;
-            break;
+            case 0b100111: // vmulh
+                result = multiply_high_signed(a, b, config.sew_bits);
+                break;
+            }
         }
+        else
+        {
+            switch (funct6)
+            {
+            case 0b000000:
+                result = a + b;
+                break;
 
-        case 0b101000: { // vsrl
-            const unsigned int shamt =
-                static_cast<unsigned int>(b & (config.sew_bits - 1));
-            result = a >> shamt;
-            break;
-        }
+            case 0b000010:
+                result = a - b;
+                break;
 
-        case 0b101001: { // vsra
-            const unsigned int shamt =
-                static_cast<unsigned int>(b & (config.sew_bits - 1));
-            result = arithmetic_shift_right(a, shamt, config.sew_bits);
-            break;
-        }
+            case 0b000011: // vrsub
+                result = b - a;
+                break;
+
+            case 0b000100: // vminu
+                result = (a < b) ? a : b;
+                break;
+
+            case 0b000101: // vmin
+                result = signed_less(a, b, config.sew_bits) ? a : b;
+                break;
+
+            case 0b000110: // vmaxu
+                result = (a > b) ? a : b;
+                break;
+
+            case 0b000111: // vmax
+                result = signed_less(b, a, config.sew_bits) ? a : b;
+                break;
+
+            case 0b001001:
+                result = a & b;
+                break;
+
+            case 0b001010:
+                result = a | b;
+                break;
+
+            case 0b001011:
+                result = a ^ b;
+                break;
+
+            case 0b100101: { // vsll
+                const unsigned int shamt =
+                    static_cast<unsigned int>(b & (config.sew_bits - 1));
+                result = a << shamt;
+                break;
+            }
+
+            case 0b101000: { // vsrl
+                const unsigned int shamt =
+                    static_cast<unsigned int>(b & (config.sew_bits - 1));
+                result = a >> shamt;
+                break;
+            }
+
+            case 0b101001: { // vsra
+                const unsigned int shamt =
+                    static_cast<unsigned int>(b & (config.sew_bits - 1));
+                result = arithmetic_shift_right(a, shamt, config.sew_bits);
+                break;
+            }
+            }
         }
 
         write_element(
@@ -1592,10 +1903,27 @@ void RVSSProcessor::WriteBack()
         WriteBackVectorArithmetic();
         return;
     }
-    // Handle vector reduction writeback.
+    // Handle vector reduction and OPMVV writeback.
     if (opcode == 0x57 && funct3 == 0b010)
     {
-         WriteBackVectorReduction();
+        const uint8_t funct6 = (current_instruction_ >> 26) & 0x3F;
+        if (funct6 == 0b000000)
+        {
+            WriteBackVectorReduction();
+        }
+        else if (funct6 == 0b100100 || funct6 == 0b100101 ||
+                 funct6 == 0b100110 || funct6 == 0b100111 ||
+                 funct6 == 0b100000 || funct6 == 0b100001 ||
+                 funct6 == 0b100010 || funct6 == 0b100011)
+        {
+            WriteBackVectorArithmetic();
+        }
+        return;
+    }
+    // Handle OPMVX writeback (vector-scalar multiply).
+    if (opcode == 0x57 && funct3 == 0b110)
+    {
+        WriteBackVectorArithmetic();
         return;
     }
     // Handle vector memory instructions.

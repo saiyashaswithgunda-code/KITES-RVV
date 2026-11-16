@@ -124,6 +124,56 @@
 
   `vsra.vi`     Vector-immediate        Yes         Yes         Yes         Yes Complete
                 arithmetic shift right
+
+  `vmul.vv`     Vector-vector integer   Yes         Yes         Yes         Yes Complete
+                multiply (low half)
+
+  `vmul.vx`     Vector-scalar integer   Yes         Yes         Yes         Yes Complete
+                multiply (low half)
+
+  `vmulh.vv`    Vector-vector signed    Yes         Yes         Yes         Yes Complete
+                multiply (high half)
+
+  `vmulh.vx`    Vector-scalar signed    Yes         Yes         Yes         Yes Complete
+                multiply (high half)
+
+  `vmulhu.vv`   Vector-vector unsigned  Yes         Yes         Yes         Yes Complete
+                multiply (high half)
+
+  `vmulhu.vx`   Vector-scalar unsigned  Yes         Yes         Yes         Yes Complete
+                multiply (high half)
+
+  `vmulhsu.vv`  Vector-vector signed *  Yes         Yes         Yes         Yes Complete
+                unsigned multiply
+                (high half)
+
+  `vmulhsu.vx`  Vector-scalar signed *  Yes         Yes         Yes         Yes Complete
+                unsigned multiply
+                (high half)
+
+  `vdivu.vv`    Vector-vector unsigned  Yes         Yes         Yes         Yes Complete
+                division
+
+  `vdivu.vx`    Vector-scalar unsigned  Yes         Yes         Yes         Yes Complete
+                division
+
+  `vdiv.vv`     Vector-vector signed    Yes         Yes         Yes         Yes Complete
+                division
+
+  `vdiv.vx`     Vector-scalar signed    Yes         Yes         Yes         Yes Complete
+                division
+
+  `vremu.vv`    Vector-vector unsigned  Yes         Yes         Yes         Yes Complete
+                remainder
+
+  `vremu.vx`    Vector-scalar unsigned  Yes         Yes         Yes         Yes Complete
+                remainder
+
+  `vrem.vv`     Vector-vector signed    Yes         Yes         Yes         Yes Complete
+                remainder
+
+  `vrem.vx`     Vector-scalar signed    Yes         Yes         Yes         Yes Complete
+                remainder
   -----------------------------------------------------------------------------------------
 
 ## 3. Pending arithmetic candidates
@@ -218,8 +268,26 @@ instruction or coherent instruction family.
   operations                                                         bit
                                                                      operations
 
-  Shift             Unassigned   ---         Pending     ---         Shift amount
-  operations                                                         mod SEW
+  Shift             Completed    `rvv-       Complete    Vector-     Shift amount
+  operations                     development2`           Arithmetic  mod SEW, uimm5
+  (`vsll`, `vsrl`,                                       Test,       for .vi, SEW
+  `vsra`)                                                Vector-     8/16/32/64
+                                                         Assembler
+                                                         Test
+
+  Vector integer    Completed    `rvv-       Complete    Vector-     SEW 8/16/32/64,
+  multiplication                 development2`           Arithmetic  OPMVV/OPMVX,
+  (`vmul`, `vmulh`,                                      Test,       exact 128-bit
+  `vmulhu`,                                              Vector-     signed/unsigned
+  `vmulhsu`)                                             Assembler   high half
+                                                         Test
+
+  Vector integer    Completed    `rvv-       Complete    Vector-     SEW 8/16/32/64,
+  division &                     development2`           Arithmetic  div/rem by zero,
+  remainder                                              Test,       INT_MIN / -1 safe,
+  (`vdiv`, `vdivu`,                                      Vector-     OPMVV/OPMVX,
+  `vrem`, `vremu`)                                       Assembler   vstart >= vl fix
+                                                         Test
 
   Strided/indexed   Unassigned   ---         Optional    ---         Separate
   memory                                                             larger phase
