@@ -97,6 +97,33 @@
 
   `vse64.v`     Unit-stride             Yes         Yes         Yes         Yes Complete
                 store, EEW=64
+
+  `vsll.vv`     Vector-vector           Yes         Yes         Yes         Yes Complete
+                logical shift left
+
+  `vsll.vx`     Vector-scalar           Yes         Yes         Yes         Yes Complete
+                logical shift left
+
+  `vsll.vi`     Vector-immediate        Yes         Yes         Yes         Yes Complete
+                logical shift left
+
+  `vsrl.vv`     Vector-vector           Yes         Yes         Yes         Yes Complete
+                logical shift right
+
+  `vsrl.vx`     Vector-scalar           Yes         Yes         Yes         Yes Complete
+                logical shift right
+
+  `vsrl.vi`     Vector-immediate        Yes         Yes         Yes         Yes Complete
+                logical shift right
+
+  `vsra.vv`     Vector-vector           Yes         Yes         Yes         Yes Complete
+                arithmetic shift right
+
+  `vsra.vx`     Vector-scalar           Yes         Yes         Yes         Yes Complete
+                arithmetic shift right
+
+  `vsra.vi`     Vector-immediate        Yes         Yes         Yes         Yes Complete
+                arithmetic shift right
   -----------------------------------------------------------------------------------------
 
 ## 3. Pending arithmetic candidates
@@ -113,9 +140,6 @@ implementing them.
   `vmsltu.vv`   Unsigned less-than comparison                   Medium Pending
   `vmsle.vv`    Signed less-than-or-equal                       Medium Pending
   `vmsleu.vv`   Unsigned less-than-or-equal                     Medium Pending
-  `vsll.[vv,vx,vi]` Logical shift left                          Medium Pending
-  `vsrl.[vv,vx,vi]` Logical shift right                         Medium Pending
-  `vsra.[vv,vx,vi]` Arithmetic shift right                      Medium Pending
 
 Note: do not assume `vsub.vi` is a valid substitute for `vrsub.vi`.
 Verify mnemonic availability and operand semantics in the specification.

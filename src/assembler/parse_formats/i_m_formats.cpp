@@ -751,20 +751,46 @@ bool Parser::parse_vector_vi()
     block.setRs2(peekToken(3).value);
 
     const int64_t imm = std::stoll(peekToken(5).value);
-    if (-16 <= imm && imm <= 15)
+    const std::string &opcode = block.getOpcode();
+
+    const bool is_shift_vi =
+        (opcode == "vsll.vi" || opcode == "vsrl.vi" || opcode == "vsra.vi");
+
+    if (is_shift_vi)
     {
-        block.setImm(std::to_string(imm));
+        if (0 <= imm && imm <= 31)
+        {
+            block.setImm(std::to_string(imm));
+        }
+        else
+        {
+            recordError(
+                ParseError(peekToken(5).line_number, "Immediate value out of range"));
+            errors_.all_errors.emplace_back(errors::ImmediateOutOfRangeError(
+                "Immediate value out of range", "Expected: 0 <= imm <= 31", filename_,
+                peekToken(5).line_number, peekToken(5).column_number,
+                (filename_ == "<stream>") ? "" : GetLineFromFile(filename_, peekToken(5).line_number)));
+            skipCurrentLine();
+            return true;
+        }
     }
     else
     {
-        recordError(
-            ParseError(peekToken(5).line_number, "Immediate value out of range"));
-        errors_.all_errors.emplace_back(errors::ImmediateOutOfRangeError(
-            "Immediate value out of range", "Expected: -16 <= imm <= 15", filename_,
-            peekToken(5).line_number, peekToken(5).column_number,
-            (filename_ == "<stream>") ? "" : GetLineFromFile(filename_, peekToken(5).line_number)));
-        skipCurrentLine();
-        return true;
+        if (-16 <= imm && imm <= 15)
+        {
+            block.setImm(std::to_string(imm));
+        }
+        else
+        {
+            recordError(
+                ParseError(peekToken(5).line_number, "Immediate value out of range"));
+            errors_.all_errors.emplace_back(errors::ImmediateOutOfRangeError(
+                "Immediate value out of range", "Expected: -16 <= imm <= 15", filename_,
+                peekToken(5).line_number, peekToken(5).column_number,
+                (filename_ == "<stream>") ? "" : GetLineFromFile(filename_, peekToken(5).line_number)));
+            skipCurrentLine();
+            return true;
+        }
     }
 
     skipCurrentLine();

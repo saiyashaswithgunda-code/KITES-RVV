@@ -1459,3 +1459,418 @@ TEST(VectorArithmeticTest, Batch1UndoRedo)
     EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(3, 1), 4u);
     EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
 }
+
+TEST(VectorArithmeticTest, VsllBasicAllSEWAndHighBits)
+{
+    // SEW = 8 (funct6 = 0b100101)
+    TestArithmetic<uint8_t>(0b100101, {0x01, 0x03, 0x80, 0x0F}, {0, 1, 1, 4}, {0x01, 0x06, 0x00, 0xF0});
+    // SEW = 8: shift amount low log2(SEW) bits -> 0x83 & 7 = 3, 0xF0 & 7 = 0
+    TestArithmetic<uint8_t>(0b100101, {0x01, 0x07}, {0x83, 0xF0}, {0x08, 0x07});
+
+    // SEW = 16
+    TestArithmetic<uint16_t>(0b100101, {0x0001, 0x00FF, 0x8000, 0x000F}, {0, 8, 1, 12}, {0x0001, 0xFF00, 0x0000, 0xF000});
+
+    // SEW = 32
+    TestArithmetic<uint32_t>(0b100101, {0x00000001, 0x0000FFFF, 0x80000000, 0x00000001}, {0, 16, 1, 31}, {0x00000001, 0xFFFF0000, 0x00000000, 0x80000000});
+
+    // SEW = 64
+    TestArithmetic<uint64_t>(0b100101, {0x0000000000000001ULL, 0x8000000000000000ULL}, {32, 1}, {0x0000000100000000ULL, 0x0000000000000000ULL});
+}
+
+TEST(VectorArithmeticTest, VsllVXAndVI)
+{
+    // vsll.vx SEW = 8
+    TestArithmeticVX<uint8_t>(0b100101, {0x01, 0x02, 0x03, 0x04}, 2, {0x04, 0x08, 0x0C, 0x10});
+    // vsll.vx with scalar operand high bits set (0xFFFFFFFFFFFFFF02 on SEW 8 -> shift distance 2)
+    TestArithmeticVX<uint8_t>(0b100101, {0x01, 0x02, 0x03, 0x04}, 0xFFFFFFFFFFFFFF02ULL, {0x04, 0x08, 0x0C, 0x10});
+
+    // vsll.vx SEW = 16
+    TestArithmeticVX<uint16_t>(0b100101, {0x0001, 0x0002, 0x0003, 0x0004}, 4, {0x0010, 0x0020, 0x0030, 0x0040});
+
+    // vsll.vx SEW = 32
+    TestArithmeticVX<uint32_t>(0b100101, {0x00000001, 0x00000002}, 4, {0x00000010, 0x00000020});
+
+    // vsll.vx SEW = 64
+    TestArithmeticVX<uint64_t>(0b100101, {0x0000000000000001ULL, 0x0000000000000002ULL}, 32, {0x0000000100000000ULL, 0x0000000200000000ULL});
+
+    // vsll.vi SEW = 8: shift by 3
+    TestArithmeticVI<uint8_t>(0b100101, {0x01, 0x02, 0x03, 0x04}, 3, {0x08, 0x10, 0x18, 0x20});
+    // vsll.vi SEW = 8: shift by 0
+    TestArithmeticVI<uint8_t>(0b100101, {0x55, 0xAA}, 0, {0x55, 0xAA});
+    // vsll.vi SEW = 8: uimm5 = 31 -> 31 & 7 = 7
+    TestArithmeticVI<uint8_t>(0b100101, {0x01, 0x03}, 31, {0x80, 0x80});
+
+    // vsll.vi SEW = 16: shift by 8
+    TestArithmeticVI<uint16_t>(0b100101, {0x0001, 0x0003}, 8, {0x0100, 0x0300});
+
+    // vsll.vi SEW = 32: shift by 16
+    TestArithmeticVI<uint32_t>(0b100101, {0x00000001, 0x00000003}, 16, {0x00010000, 0x00030000});
+    // vsll.vi SEW = 32: uimm5 = 31
+    TestArithmeticVI<uint32_t>(0b100101, {0x00000001, 0x00000002}, 31, {0x80000000, 0x00000000});
+
+    // vsll.vi SEW = 64: uimm5 = 31
+    TestArithmeticVI<uint64_t>(0b100101, {0x0000000000000001ULL, 0x0000000000000003ULL}, 31, {0x0000000080000000ULL, 0x0000000180000000ULL});
+}
+
+TEST(VectorArithmeticTest, VsrlBasicAllSEWAndHighBits)
+{
+    // SEW = 8 (funct6 = 0b101000)
+    TestArithmetic<uint8_t>(0b101000, {0x80, 0xFF, 0x01, 0xAA}, {1, 4, 1, 0}, {0x40, 0x0F, 0x00, 0xAA});
+    // SEW = 8: shift amount low log2(SEW) bits -> 0x81 & 7 = 1
+    TestArithmetic<uint8_t>(0b101000, {0x80, 0x08}, {0x81, 0x00}, {0x40, 0x08});
+
+    // SEW = 16
+    TestArithmetic<uint16_t>(0b101000, {0x8000, 0xFFFF, 0x0001}, {1, 8, 0}, {0x4000, 0x00FF, 0x0001});
+
+    // SEW = 32
+    TestArithmetic<uint32_t>(0b101000, {0x80000000, 0xFFFFFFFF, 0x12345678}, {1, 16, 4}, {0x40000000, 0x0000FFFF, 0x01234567});
+
+    // SEW = 64
+    TestArithmetic<uint64_t>(0b101000, {0x8000000000000000ULL, 0xFFFFFFFFFFFFFFFFULL}, {1, 32}, {0x4000000000000000ULL, 0x00000000FFFFFFFFULL});
+}
+
+TEST(VectorArithmeticTest, VsrlVXAndVI)
+{
+    // vsrl.vx SEW = 8
+    TestArithmeticVX<uint8_t>(0b101000, {0x40, 0x80, 0x10, 0x20}, 2, {0x10, 0x20, 0x04, 0x08});
+    // vsrl.vx scalar with high bits set
+    TestArithmeticVX<uint8_t>(0b101000, {0x40, 0x80, 0x10, 0x20}, 0xFFFFFFFFFFFFFF02ULL, {0x10, 0x20, 0x04, 0x08});
+
+    // vsrl.vx SEW = 16
+    TestArithmeticVX<uint16_t>(0b101000, {0x0100, 0x0200, 0x0300, 0x0400}, 4, {0x0010, 0x0020, 0x0030, 0x0040});
+
+    // vsrl.vx SEW = 32
+    TestArithmeticVX<uint32_t>(0b101000, {0x12345678, 0x80000000}, 4, {0x01234567, 0x08000000});
+
+    // vsrl.vx SEW = 64
+    TestArithmeticVX<uint64_t>(0b101000, {0x0000000100000000ULL, 0x0000000200000000ULL}, 32, {0x0000000000000001ULL, 0x0000000000000002ULL});
+
+    // vsrl.vi SEW = 8: shift by 2
+    TestArithmeticVI<uint8_t>(0b101000, {0x40, 0x80, 0x10, 0x20}, 2, {0x10, 0x20, 0x04, 0x08});
+    // vsrl.vi SEW = 8: shift by 0
+    TestArithmeticVI<uint8_t>(0b101000, {0x40, 0x80}, 0, {0x40, 0x80});
+    // vsrl.vi SEW = 8: uimm5 = 31 -> 31 & 7 = 7
+    TestArithmeticVI<uint8_t>(0b101000, {0x80, 0xFF}, 31, {0x01, 0x01});
+
+    // vsrl.vi SEW = 16: shift by 4
+    TestArithmeticVI<uint16_t>(0b101000, {0x1234, 0x8000}, 4, {0x0123, 0x0800});
+
+    // vsrl.vi SEW = 32: shift by 8
+    TestArithmeticVI<uint32_t>(0b101000, {0x12345678, 0x80000000}, 8, {0x00123456, 0x00800000});
+    // vsrl.vi SEW = 32: uimm5 = 31
+    TestArithmeticVI<uint32_t>(0b101000, {0x80000000, 0xFFFFFFFF}, 31, {0x00000001, 0x00000001});
+
+    // vsrl.vi SEW = 64: shift by 16
+    TestArithmeticVI<uint64_t>(0b101000, {0x1234567800000000ULL, 0x8000000000000000ULL}, 16, {0x0000123456780000ULL, 0x0000800000000000ULL});
+}
+
+TEST(VectorArithmeticTest, VsraBasicAllSEWAndSignPropagation)
+{
+    // SEW = 8 (funct6 = 0b101001)
+    // 0x40 (positive) >> 1 = 0x20
+    // 0x80 (-128) >> 1 = 0xC0 (-64)
+    // 0x80 (-128) >> 7 = 0xFF (-1)
+    // 0xFF (-1) >> 3 = 0xFF (-1)
+    TestArithmetic<uint8_t>(0b101001, {0x40, 0x80, 0x80, 0xFF}, {1, 1, 7, 3}, {0x20, 0xC0, 0xFF, 0xFF});
+    // SEW = 8: shift amount low log2(SEW) bits -> 0x81 & 7 = 1
+    TestArithmetic<uint8_t>(0b101001, {0x80, 0x40}, {0x81, 0xF0}, {0xC0, 0x40});
+
+    // SEW = 16
+    // 0x8000 (-32768) >> 1 = 0xC000 (-16384)
+    // 0x8000 >> 15 = 0xFFFF (-1)
+    // 0x7FFF (+32767) >> 1 = 0x3FFF
+    TestArithmetic<uint16_t>(0b101001, {0x8000, 0x8000, 0x7FFF}, {1, 15, 1}, {0xC000, 0xFFFF, 0x3FFF});
+
+    // SEW = 32
+    // 0x80000000 >> 1 = 0xC0000000
+    // 0x80000000 >> 31 = 0xFFFFFFFF
+    // 0x7FFFFFFF >> 1 = 0x3FFFFFFF
+    TestArithmetic<uint32_t>(0b101001, {0x80000000, 0x80000000, 0x7FFFFFFF}, {1, 31, 1}, {0xC0000000, 0xFFFFFFFF, 0x3FFFFFFF});
+
+    // SEW = 64
+    // 0x8000000000000000ULL >> 1 = 0xC000000000000000ULL
+    // 0x8000000000000000ULL >> 63 = 0xFFFFFFFFFFFFFFFFULL
+    TestArithmetic<uint64_t>(0b101001, {0x8000000000000000ULL, 0x8000000000000000ULL}, {1, 63}, {0xC000000000000000ULL, 0xFFFFFFFFFFFFFFFFULL});
+}
+
+TEST(VectorArithmeticTest, VsraVXAndVI)
+{
+    // vsra.vx SEW = 8: shift by 1 with sign propagation
+    TestArithmeticVX<uint8_t>(0b101001, {0x80, 0x40, 0xFE, 0x02}, 1, {0xC0, 0x20, 0xFF, 0x01});
+    // vsra.vx scalar with high bits set (0xFFFFFFFFFFFFFF01 -> shift distance 1)
+    TestArithmeticVX<uint8_t>(0b101001, {0x80, 0x40}, 0xFFFFFFFFFFFFFF01ULL, {0xC0, 0x20});
+
+    // vsra.vx SEW = 16: shift by 2
+    TestArithmeticVX<uint16_t>(0b101001, {0x8000, 0x4000}, 2, {0xE000, 0x1000});
+
+    // vsra.vx SEW = 32: shift by 2
+    TestArithmeticVX<uint32_t>(0b101001, {0x80000000, 0x40000000}, 2, {0xE0000000, 0x10000000});
+
+    // vsra.vx SEW = 64: shift by 2
+    TestArithmeticVX<uint64_t>(0b101001, {0x8000000000000000ULL, 0x4000000000000000ULL}, 2, {0xE000000000000000ULL, 0x1000000000000000ULL});
+
+    // vsra.vi SEW = 8: shift by 1
+    TestArithmeticVI<uint8_t>(0b101001, {0x80, 0x40, 0xFE, 0x02}, 1, {0xC0, 0x20, 0xFF, 0x01});
+    // vsra.vi SEW = 8: shift by 0
+    TestArithmeticVI<uint8_t>(0b101001, {0x80, 0x7F}, 0, {0x80, 0x7F});
+    // vsra.vi SEW = 8: uimm5 = 31 -> 31 & 7 = 7 -> all sign bits
+    TestArithmeticVI<uint8_t>(0b101001, {0x80, 0x7F}, 31, {0xFF, 0x00});
+
+    // vsra.vi SEW = 16: shift by 4
+    TestArithmeticVI<uint16_t>(0b101001, {0x8000, 0x7FFF}, 4, {0xF800, 0x07FF});
+
+    // vsra.vi SEW = 32: shift by 4
+    TestArithmeticVI<uint32_t>(0b101001, {0xF0000000, 0x10000000}, 4, {0xFF000000, 0x01000000});
+    // vsra.vi SEW = 32: uimm5 = 31
+    TestArithmeticVI<uint32_t>(0b101001, {0x80000000, 0x7FFFFFFF}, 31, {0xFFFFFFFF, 0x00000000});
+
+    // vsra.vi SEW = 64: shift by 4
+    TestArithmeticVI<uint64_t>(0b101001, {0x8000000000000000ULL, 0x7000000000000000ULL}, 4, {0xF800000000000000ULL, 0x0700000000000000ULL});
+}
+
+TEST(VectorArithmeticTest, VectorShiftMaskingAndPolicies)
+{
+    // Test 1: vsll.vi masked with mu (mask-undisturbed)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vsll.vi v3, v1, 2, v0.t (vm = 0, ta = false, ma = false)
+        LoadVectorVIProgram(processor, 32, 4, EncodeVectorVI(0b100101, 3, 1, 2, 0), false, false);
+
+        // Mask in v0: bit 0 = 1, bit 1 = 0, bit 2 = 1, bit 3 = 0 -> 0b00000101
+        processor.registers_.WriteVregElement<uint8_t>(0, 0, 0b00000101);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {1, 2, 3, 4});
+        WriteElements<uint32_t>(processor.registers_, 3, {100, 200, 300, 400});
+
+        processor.Step();
+
+        // Element 0: active -> 1 << 2 = 4
+        // Element 1: masked-off, mu -> retains 200
+        // Element 2: active -> 3 << 2 = 12
+        // Element 3: masked-off, mu -> retains 400
+        ExpectElements<uint32_t>(processor.registers_, 3, {4, 200, 12, 400});
+    }
+
+    // Test 2: vsra.vx masked with ma (mask-agnostic, inactive elements filled with 1s)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vsra.vx v3, v1, x2, v0.t (vm = 0, ta = false, ma = true)
+        LoadVectorVXProgram(processor, 32, 4, EncodeVectorVX(0b101001, 3, 1, 2, 0), 1, 2, false, true);
+
+        // Mask in v0: bit 0 = 0, bit 1 = 1, bit 2 = 0, bit 3 = 1 -> 0b00001010
+        processor.registers_.WriteVregElement<uint8_t>(0, 0, 0b00001010);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {0x80000000, 0x80000000, 0x40, 0x40});
+        WriteElements<uint32_t>(processor.registers_, 3, {100, 200, 300, 400});
+
+        processor.Step();
+
+        // Element 0: inactive, ma -> 0xFFFFFFFF
+        // Element 1: active -> 0x80000000 >> 1 = 0xC0000000
+        // Element 2: inactive, ma -> 0xFFFFFFFF
+        // Element 3: active -> 0x40 >> 1 = 0x20
+        ExpectElements<uint32_t>(processor.registers_, 3, {0xFFFFFFFFu, 0xC0000000u, 0xFFFFFFFFu, 0x00000020u});
+    }
+}
+
+TEST(VectorArithmeticTest, VectorShiftTailPolicy)
+{
+    // Test 1: tail-agnostic (ta = true) for vsrl.vi
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vsrl.vi v3, v1, 1 with vl = 2 < VLMAX (VLMAX = 4 for SEW=32)
+        // ta = true (tail-agnostic)
+        LoadVectorVIProgram(processor, 32, 2, EncodeVectorVI(0b101000, 3, 1, 1, 1), true, false);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {0x10, 0x20, 0x30, 0x40});
+        WriteElements<uint32_t>(processor.registers_, 3, {100, 200, 300, 400});
+
+        processor.Step();
+
+        // Elements 0, 1 active: 0x10 >> 1 = 0x08, 0x20 >> 1 = 0x10
+        // Tail elements 2, 3: ta -> 0xFFFFFFFF
+        ExpectElements<uint32_t>(processor.registers_, 3, {0x08, 0x10, 0xFFFFFFFFu, 0xFFFFFFFFu});
+    }
+
+    // Test 2: tail-undisturbed (ta = false) for vsll.vx -> inactive tail elements retain original destination values
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vsll.vx v3, v1, x2 with vl = 2 < VLMAX (VLMAX = 4 for SEW=32)
+        // ta = false (tail-undisturbed)
+        LoadVectorVXProgram(processor, 32, 2, EncodeVectorVX(0b100101, 3, 1, 2, 1), 2, 2, false, false);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {10, 20, 30, 40});
+        WriteElements<uint32_t>(processor.registers_, 3, {100, 200, 300, 400});
+
+        processor.Step();
+
+        // Elements 0, 1 active: 10 << 2 = 40, 20 << 2 = 80
+        // Tail elements 2, 3: undisturbed -> retain 300, 400
+        ExpectElements<uint32_t>(processor.registers_, 3, {40, 80, 300, 400});
+    }
+}
+
+TEST(VectorArithmeticTest, VectorShiftVstart)
+{
+    // Test 1: 0 < vstart < vl with vsll.vv
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vsll.vv v3, v1, v2 (vl = 4)
+        LoadVectorProgram(processor, 32, 4, EncodeVectorVV(0b100101, 3, 1, 2, 1));
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 2);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {1, 2, 3, 4});
+        WriteElements<uint32_t>(processor.registers_, 2, {1, 1, 1, 1});
+        WriteElements<uint32_t>(processor.registers_, 3, {100, 200, 300, 400});
+
+        processor.Step();
+
+        // Elements 0, 1: prestart undisturbed -> retain 100, 200
+        // Elements 2, 3: active -> 3 << 1 = 6, 4 << 1 = 8
+        // vstart reset to 0
+        ExpectElements<uint32_t>(processor.registers_, 3, {100, 200, 6, 8});
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+
+    // Test 2: vstart == vl with vsrl.vi -> no active elements computed, destination undisturbed, vstart reset to 0
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorVIProgram(processor, 32, 2, EncodeVectorVI(0b101000, 3, 1, 1, 1));
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 2);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {0x10, 0x20, 0x30, 0x40});
+        WriteElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+
+        processor.Step();
+
+        // Destination unchanged
+        ExpectElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+        // vstart reset to 0
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+
+    // Test 3: vstart > vl with vsra.vx -> aborts early, destination unchanged, vstart preserved
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorVXProgram(processor, 32, 2, EncodeVectorVX(0b101001, 3, 1, 2, 1), 2);
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 3);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {0x80000000, 0x40000000});
+        WriteElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+
+        processor.Step();
+
+        // Destination unchanged
+        ExpectElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+        // vstart preserved
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 3u);
+    }
+}
+
+TEST(VectorArithmeticTest, VectorShiftAliasingAndHazardSafety)
+{
+    // Test 1: vd == vs2 (in-place shift)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vsra.vi v1, v1, 2
+        LoadVectorVIProgram(processor, 32, 2, EncodeVectorVI(0b101001, 1, 1, 2, 1));
+        WriteElements<uint32_t>(processor.registers_, 1, {0x80000000, 0x20});
+
+        processor.Step();
+
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(1, 0), 0xE0000000u);
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(1, 1), 0x08u);
+    }
+
+    // Test 2: vd == vs1 with vsll.vv
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vsll.vv v2, v1, v2 (vd = 2, vs2 = 1, vs1 = 2)
+        LoadVectorProgram(processor, 32, 2, EncodeVectorVV(0b100101, 2, 1, 2, 1));
+        WriteElements<uint32_t>(processor.registers_, 1, {0x01, 0x02});
+        WriteElements<uint32_t>(processor.registers_, 2, {3, 4});
+
+        processor.Step();
+
+        // 1 << 3 = 8, 2 << 4 = 32
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(2, 0), 8u);
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(2, 1), 32u);
+    }
+
+    // Test 3: vd == v0 with vm = 0 (destination is mask register)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vsrl.vi v0, v1, 1, v0.t (vd = 0, vs2 = 1, uimm5 = 1, vm = 0)
+        LoadVectorVIProgram(processor, 32, 4, EncodeVectorVI(0b101000, 0, 1, 1, 0), false, false);
+
+        // Initial mask in v0: bit 0=1, bit 1=1, bit 2=0, bit 3=1 -> 0x0B
+        processor.registers_.WriteVregElement<uint8_t>(0, 0, 0x0B);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {0x10, 0x20, 0x30, 0x40});
+        processor.registers_.WriteVregElement<uint32_t>(0, 1, 100);
+        processor.registers_.WriteVregElement<uint32_t>(0, 2, 200);
+        processor.registers_.WriteVregElement<uint32_t>(0, 3, 300);
+
+        processor.Step();
+
+        // Element 0: active -> 0x10 >> 1 = 0x08
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(0, 0), 0x08u);
+        // Element 1: active -> 0x20 >> 1 = 0x10
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(0, 1), 0x10u);
+        // Element 2: inactive (mask bit 2 was 0) -> retains 200
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(0, 2), 200u);
+        // Element 3: active -> 0x40 >> 1 = 0x20
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(0, 3), 0x20u);
+    }
+}
+
+TEST(VectorArithmeticTest, VectorShiftUndoRedo)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    // vsra.vi v3, v1, 2
+    LoadVectorVIProgram(processor, 32, 2, EncodeVectorVI(0b101001, 3, 1, 2, 1));
+    processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 1);
+
+    WriteElements<uint32_t>(processor.registers_, 1, {0x80000000, 0x80000000});
+    WriteElements<uint32_t>(processor.registers_, 3, {100, 200});
+
+    // Step vsra.vi: element 0 prestart preserved (100), element 1 -> 0x80000000 >> 2 = 0xE0000000
+    processor.Step();
+    EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(3, 0), 100u);
+    EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(3, 1), 0xE0000000u);
+    EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+
+    // Undo -> restores element 1 to 200, vstart to 1
+    processor.Undo();
+    EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(3, 0), 100u);
+    EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(3, 1), 200u);
+    EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 1u);
+
+    // Redo -> restores element 1 to 0xE0000000, vstart to 0
+    processor.Redo();
+    EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(3, 0), 100u);
+    EXPECT_EQ(processor.registers_.ReadVregElement<uint32_t>(3, 1), 0xE0000000u);
+    EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+}

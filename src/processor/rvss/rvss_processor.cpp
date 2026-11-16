@@ -504,6 +504,9 @@ void RVSSProcessor::ExecuteVectorArithmetic()
         case 0b001001:
         case 0b001010:
         case 0b001011:
+        case 0b100101: // vsll.vv
+        case 0b101000: // vsrl.vv
+        case 0b101001: // vsra.vv
             break;
 
         default:
@@ -521,6 +524,9 @@ void RVSSProcessor::ExecuteVectorArithmetic()
         case 0b000101: // vmin.vx
         case 0b000110: // vmaxu.vx
         case 0b000111: // vmax.vx
+        case 0b100101: // vsll.vx
+        case 0b101000: // vsrl.vx
+        case 0b101001: // vsra.vx
             break;
 
         default:
@@ -533,6 +539,9 @@ void RVSSProcessor::ExecuteVectorArithmetic()
         {
         case 0b000000: // vadd.vi
         case 0b000011: // vrsub.vi
+        case 0b100101: // vsll.vi
+        case 0b101000: // vsrl.vi
+        case 0b101001: // vsra.vi
             break;
 
         default:
@@ -615,16 +624,52 @@ void RVSSProcessor::ExecuteVectorArithmetic()
     const uint64_t scalar_val =
         (funct3 == 0b100) ? (registers_.ReadGpr(vs1) & element_mask) : 0;
 
-    // For OP-IVI: extract 5-bit signed immediate (simm5) and sign-extend to SEW.
-    const uint8_t simm5_raw = (current_instruction_ >> 15) & 0x1F;
+    // For OP-IVI: extract 5-bit immediate.
+    // For shifts (vsll, vsrl, vsra): uimm5 is unsigned (zero-extended).
+    // For arithmetic (vadd, vrsub): simm5 is signed (sign-extended to SEW).
+    const uint8_t imm5_raw = (current_instruction_ >> 15) & 0x1F;
+
+    const bool is_shift_op =
+        (funct6 == 0b100101 || funct6 == 0b101000 || funct6 == 0b101001);
 
     const int32_t simm5_signed =
-        (simm5_raw & 0x10)
-            ? static_cast<int32_t>(simm5_raw) - 32
-            : static_cast<int32_t>(simm5_raw);
+        (imm5_raw & 0x10)
+            ? static_cast<int32_t>(imm5_raw) - 32
+            : static_cast<int32_t>(imm5_raw);
 
     const uint64_t imm_val =
-        static_cast<uint64_t>(simm5_signed) & element_mask;
+        is_shift_op
+            ? static_cast<uint64_t>(imm5_raw)
+            : (static_cast<uint64_t>(simm5_signed) & element_mask);
+
+    auto arithmetic_shift_right = [](uint64_t val, unsigned int shamt, unsigned int sew_bits) -> uint64_t
+    {
+        switch (sew_bits)
+        {
+        case 8: {
+            const auto sval = std::bit_cast<int8_t>(static_cast<uint8_t>(val));
+            const auto shifted = static_cast<int8_t>(sval >> shamt);
+            return static_cast<uint8_t>(shifted);
+        }
+        case 16: {
+            const auto sval = std::bit_cast<int16_t>(static_cast<uint16_t>(val));
+            const auto shifted = static_cast<int16_t>(sval >> shamt);
+            return static_cast<uint16_t>(shifted);
+        }
+        case 32: {
+            const auto sval = std::bit_cast<int32_t>(static_cast<uint32_t>(val));
+            const auto shifted = sval >> shamt;
+            return static_cast<uint32_t>(shifted);
+        }
+        case 64: {
+            const auto sval = std::bit_cast<int64_t>(val);
+            const auto shifted = sval >> shamt;
+            return static_cast<uint64_t>(shifted);
+        }
+        default:
+            return 0;
+        }
+    };
 
     auto signed_less = [](uint64_t a, uint64_t b, unsigned int sew_bits) -> bool
     {
@@ -731,6 +776,27 @@ void RVSSProcessor::ExecuteVectorArithmetic()
         case 0b001011:
             result = a ^ b;
             break;
+
+        case 0b100101: { // vsll
+            const unsigned int shamt =
+                static_cast<unsigned int>(b & (config.sew_bits - 1));
+            result = a << shamt;
+            break;
+        }
+
+        case 0b101000: { // vsrl
+            const unsigned int shamt =
+                static_cast<unsigned int>(b & (config.sew_bits - 1));
+            result = a >> shamt;
+            break;
+        }
+
+        case 0b101001: { // vsra
+            const unsigned int shamt =
+                static_cast<unsigned int>(b & (config.sew_bits - 1));
+            result = arithmetic_shift_right(a, shamt, config.sew_bits);
+            break;
+        }
         }
 
         write_element(

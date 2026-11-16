@@ -2,7 +2,7 @@
 
 ## 1. Status summary
 
-**Latest known verification:** 311/311 tests passed (100% CTest pass rate).
+**Latest known verification:** 332/332 tests passed (100% CTest pass rate).
 
 The statuses below describe the implementation after Batch 1 integer arithmetic. A
 new contributor should run the full suite before making changes to
@@ -40,6 +40,10 @@ confirm the current checkout still matches this baseline.
 
   Vector-immediate        Complete                vadd.vi, vrsub.vi with
   integer arithmetic                              simm5 immediate
+
+  Vector shift            Complete                vsll.[vv,vx,vi],
+  operations                                      vsrl.[vv,vx,vi],
+                                                  vsra.[vv,vx,vi]
 
   Vector single-width     Complete                vredsum.vs across active
   reduction                                       elements to vd[0]
@@ -215,14 +219,15 @@ Potential family:
 These operate on packed mask bits and require dedicated handling; do not route
 them through ordinary SEW arithmetic without checking the specification.
 
-### Priority C --- Vector shift operations
+### Priority C --- Vector shift operations (Implemented)
 
-Possible additions:
+Implemented additions:
 - `vsll.vv`, `vsll.vx`, `vsll.vi` (logical shift left)
 - `vsrl.vv`, `vsrl.vx`, `vsrl.vi` (logical shift right)
 - `vsra.vv`, `vsra.vx`, `vsra.vi` (arithmetic shift right)
 
-Shift amount is taken from the low $\lg(\text{SEW})$ bits of the second operand.
+Shift amount is taken from the low $\lg(\text{SEW})$ bits of the second operand. Immediate variants use zero-extended 5-bit unsigned immediate (`uimm5`).
+Supported shift amount is masked to log2(SEW) bits for all three operand forms
 
 ### Priority D --- Vector integer multiply and divide
 

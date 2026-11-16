@@ -25,7 +25,10 @@ static bool isVectorVVInstruction(const std::string &opcode)
            opcode == "vminu.vv" ||
            opcode == "vmin.vv" ||
            opcode == "vmaxu.vv" ||
-           opcode == "vmax.vv";
+           opcode == "vmax.vv" ||
+           opcode == "vsll.vv" ||
+           opcode == "vsrl.vv" ||
+           opcode == "vsra.vv";
 }
 bool isVectorMemoryInstruction(const std::string &opcode)
 {
@@ -50,12 +53,18 @@ bool isVectorVXInstruction(const std::string &opcode)
            opcode == "vminu.vx" ||
            opcode == "vmin.vx" ||
            opcode == "vmaxu.vx" ||
-           opcode == "vmax.vx";
+           opcode == "vmax.vx" ||
+           opcode == "vsll.vx" ||
+           opcode == "vsrl.vx" ||
+           opcode == "vsra.vx";
 }
 bool isVectorVIInstruction(const std::string &opcode)
 {
     return opcode == "vadd.vi" ||
-           opcode == "vrsub.vi";
+           opcode == "vrsub.vi" ||
+           opcode == "vsll.vi" ||
+           opcode == "vsrl.vi" ||
+           opcode == "vsra.vi";
 }
 std::vector<std::string>
 printIntermediateCode(const std::vector<std::pair<ICUnit, bool>> &IntermediateCode)
@@ -158,6 +167,12 @@ uint32_t generateVectorVVTypeMachineCode(const ICUnit &block)
         funct6 = 0b000110;
     else if (opcode == "vmax.vv")
         funct6 = 0b000111;
+    else if (opcode == "vsll.vv")
+        funct6 = 0b100101;
+    else if (opcode == "vsrl.vv")
+        funct6 = 0b101000;
+    else if (opcode == "vsra.vv")
+        funct6 = 0b101001;
     else
         throw std::runtime_error("Unsupported vector instruction: " + opcode);
 
@@ -261,6 +276,12 @@ uint32_t generateVectorVXTypeMachineCode(const ICUnit &block)
         funct6 = 0b000110;
     else if (opcode == "vmax.vx")
         funct6 = 0b000111;
+    else if (opcode == "vsll.vx")
+        funct6 = 0b100101;
+    else if (opcode == "vsrl.vx")
+        funct6 = 0b101000;
+    else if (opcode == "vsra.vx")
+        funct6 = 0b101001;
     else
         throw std::runtime_error("Unsupported vector instruction: " + opcode);
 
@@ -294,6 +315,12 @@ uint32_t generateVectorVITypeMachineCode(const ICUnit &block)
         funct6 = 0b000000;
     else if (opcode == "vrsub.vi")
         funct6 = 0b000011;
+    else if (opcode == "vsll.vi")
+        funct6 = 0b100101;
+    else if (opcode == "vsrl.vi")
+        funct6 = 0b101000;
+    else if (opcode == "vsra.vi")
+        funct6 = 0b101001;
     else
         throw std::runtime_error("Unsupported vector instruction: " + opcode);
 

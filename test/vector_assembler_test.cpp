@@ -467,3 +467,141 @@ TEST(VectorAssemblerTest, RejectsOutOfRangeImmediate)
     std::istringstream stream_neg("vadd.vi v1, v2, -17\n");
     EXPECT_THROW(Kites::assemble(stream_neg), std::runtime_error);
 }
+
+TEST(VectorAssemblerTest, EncodesVsllVVCorrectly)
+{
+    // vsll.vv v1, v2, v3 -> funct6=100101, funct3=000 -> 0x962180D7
+    EXPECT_EQ(
+        assembleVectorVV("vsll.vv v1, v2, v3\n"),
+        0x962180D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVsllVXCorrectly)
+{
+    // vsll.vx v1, v2, x3 -> funct6=100101, funct3=100 -> 0x9621C0D7
+    EXPECT_EQ(
+        assembleVectorVX("vsll.vx v1, v2, x3\n"),
+        0x9621C0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVsllVICorrectly)
+{
+    // vsll.vi v1, v2, 3 -> funct6=100101, funct3=011, uimm5=3 -> 0x9621B0D7
+    EXPECT_EQ(
+        assembleVectorVI("vsll.vi v1, v2, 3\n"),
+        0x9621B0D7u
+    );
+    // vsll.vi v1, v2, 0 -> 0x962030D7
+    EXPECT_EQ(
+        assembleVectorVI("vsll.vi v1, v2, 0\n"),
+        0x962030D7u
+    );
+    // vsll.vi v1, v2, 31 -> 0x962FB0D7
+    EXPECT_EQ(
+        assembleVectorVI("vsll.vi v1, v2, 31\n"),
+        0x962FB0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVsrlVVCorrectly)
+{
+    // vsrl.vv v1, v2, v3 -> funct6=101000, funct3=000 -> 0xA22180D7
+    EXPECT_EQ(
+        assembleVectorVV("vsrl.vv v1, v2, v3\n"),
+        0xA22180D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVsrlVXCorrectly)
+{
+    // vsrl.vx v1, v2, x3 -> funct6=101000, funct3=100 -> 0xA221C0D7
+    EXPECT_EQ(
+        assembleVectorVX("vsrl.vx v1, v2, x3\n"),
+        0xA221C0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVsrlVICorrectly)
+{
+    // vsrl.vi v1, v2, 3 -> funct6=101000, funct3=011, uimm5=3 -> 0xA221B0D7
+    EXPECT_EQ(
+        assembleVectorVI("vsrl.vi v1, v2, 3\n"),
+        0xA221B0D7u
+    );
+    // vsrl.vi v1, v2, 0 -> 0xA22030D7
+    EXPECT_EQ(
+        assembleVectorVI("vsrl.vi v1, v2, 0\n"),
+        0xA22030D7u
+    );
+    // vsrl.vi v1, v2, 31 -> 0xA22FB0D7
+    EXPECT_EQ(
+        assembleVectorVI("vsrl.vi v1, v2, 31\n"),
+        0xA22FB0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVsraVVCorrectly)
+{
+    // vsra.vv v1, v2, v3 -> funct6=101001, funct3=000 -> 0xA62180D7
+    EXPECT_EQ(
+        assembleVectorVV("vsra.vv v1, v2, v3\n"),
+        0xA62180D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVsraVXCorrectly)
+{
+    // vsra.vx v1, v2, x3 -> funct6=101001, funct3=100 -> 0xA621C0D7
+    EXPECT_EQ(
+        assembleVectorVX("vsra.vx v1, v2, x3\n"),
+        0xA621C0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVsraVICorrectly)
+{
+    // vsra.vi v1, v2, 3 -> funct6=101001, funct3=011, uimm5=3 -> 0xA621B0D7
+    EXPECT_EQ(
+        assembleVectorVI("vsra.vi v1, v2, 3\n"),
+        0xA621B0D7u
+    );
+    // vsra.vi v1, v2, 0 -> 0xA62030D7
+    EXPECT_EQ(
+        assembleVectorVI("vsra.vi v1, v2, 0\n"),
+        0xA62030D7u
+    );
+    // vsra.vi v1, v2, 31 -> 0xA62FB0D7
+    EXPECT_EQ(
+        assembleVectorVI("vsra.vi v1, v2, 31\n"),
+        0xA62FB0D7u
+    );
+}
+
+TEST(VectorAssemblerTest, RejectsOutOfRangeShiftImmediate)
+{
+    Kites::setupVmStateDirectory();
+
+    std::istringstream stream_sll_pos("vsll.vi v1, v2, 32\n");
+    EXPECT_THROW(Kites::assemble(stream_sll_pos), std::runtime_error);
+
+    std::istringstream stream_sll_neg("vsll.vi v1, v2, -1\n");
+    EXPECT_THROW(Kites::assemble(stream_sll_neg), std::runtime_error);
+
+    std::istringstream stream_srl_pos("vsrl.vi v1, v2, 32\n");
+    EXPECT_THROW(Kites::assemble(stream_srl_pos), std::runtime_error);
+
+    std::istringstream stream_srl_neg("vsrl.vi v1, v2, -1\n");
+    EXPECT_THROW(Kites::assemble(stream_srl_neg), std::runtime_error);
+
+    std::istringstream stream_sra_pos("vsra.vi v1, v2, 32\n");
+    EXPECT_THROW(Kites::assemble(stream_sra_pos), std::runtime_error);
+
+    std::istringstream stream_sra_neg("vsra.vi v1, v2, -1\n");
+    EXPECT_THROW(Kites::assemble(stream_sra_neg), std::runtime_error);
+
+    // Verify Batch 1 vadd.vi still rejects positive immediate > 15
+    std::istringstream stream_vadd_31("vadd.vi v1, v2, 31\n");
+    EXPECT_THROW(Kites::assemble(stream_vadd_31), std::runtime_error);
+}
