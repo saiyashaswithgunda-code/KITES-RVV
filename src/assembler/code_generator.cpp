@@ -36,7 +36,13 @@ static bool isVectorVVInstruction(const std::string &opcode)
            opcode == "vdiv.vv" ||
            opcode == "vdivu.vv" ||
            opcode == "vrem.vv" ||
-           opcode == "vremu.vv";
+           opcode == "vremu.vv" ||
+           opcode == "vmseq.vv" ||
+           opcode == "vmsne.vv" ||
+           opcode == "vmsltu.vv" ||
+           opcode == "vmslt.vv" ||
+           opcode == "vmsleu.vv" ||
+           opcode == "vmsle.vv";
 }
 bool isVectorMemoryInstruction(const std::string &opcode)
 {
@@ -72,7 +78,15 @@ bool isVectorVXInstruction(const std::string &opcode)
            opcode == "vdiv.vx" ||
            opcode == "vdivu.vx" ||
            opcode == "vrem.vx" ||
-           opcode == "vremu.vx";
+           opcode == "vremu.vx" ||
+           opcode == "vmseq.vx" ||
+           opcode == "vmsne.vx" ||
+           opcode == "vmsltu.vx" ||
+           opcode == "vmslt.vx" ||
+           opcode == "vmsleu.vx" ||
+           opcode == "vmsle.vx" ||
+           opcode == "vmsgtu.vx" ||
+           opcode == "vmsgt.vx";
 }
 bool isVectorVIInstruction(const std::string &opcode)
 {
@@ -80,7 +94,13 @@ bool isVectorVIInstruction(const std::string &opcode)
            opcode == "vrsub.vi" ||
            opcode == "vsll.vi" ||
            opcode == "vsrl.vi" ||
-           opcode == "vsra.vi";
+           opcode == "vsra.vi" ||
+           opcode == "vmseq.vi" ||
+           opcode == "vmsne.vi" ||
+           opcode == "vmsleu.vi" ||
+           opcode == "vmsle.vi" ||
+           opcode == "vmsgtu.vi" ||
+           opcode == "vmsgt.vi";
 }
 std::vector<std::string>
 printIntermediateCode(const std::vector<std::pair<ICUnit, bool>> &IntermediateCode)
@@ -205,6 +225,18 @@ uint32_t generateVectorVVTypeMachineCode(const ICUnit &block)
         funct6 = 0b100010;
     else if (opcode == "vrem.vv")
         funct6 = 0b100011;
+    else if (opcode == "vmseq.vv")
+        funct6 = 0b011000;
+    else if (opcode == "vmsne.vv")
+        funct6 = 0b011001;
+    else if (opcode == "vmsltu.vv")
+        funct6 = 0b011010;
+    else if (opcode == "vmslt.vv")
+        funct6 = 0b011011;
+    else if (opcode == "vmsleu.vv")
+        funct6 = 0b011100;
+    else if (opcode == "vmsle.vv")
+        funct6 = 0b011101;
     else
         throw std::runtime_error("Unsupported vector instruction: " + opcode);
 
@@ -217,7 +249,10 @@ uint32_t generateVectorVVTypeMachineCode(const ICUnit &block)
         (opcode == "vmul.vv" || opcode == "vmulh.vv" ||
          opcode == "vmulhu.vv" || opcode == "vmulhsu.vv" ||
          opcode == "vdiv.vv" || opcode == "vdivu.vv" ||
-         opcode == "vrem.vv" || opcode == "vremu.vv");
+         opcode == "vrem.vv" || opcode == "vremu.vv" ||
+         opcode == "vmseq.vv" || opcode == "vmsne.vv" ||
+         opcode == "vmsltu.vv" || opcode == "vmslt.vv" ||
+         opcode == "vmsleu.vv" || opcode == "vmsle.vv");
     const uint32_t funct3 = is_opmvv ? 0b010 : 0b000;
     constexpr uint32_t opcodeBits = 0b1010111;
 
@@ -335,6 +370,22 @@ uint32_t generateVectorVXTypeMachineCode(const ICUnit &block)
         funct6 = 0b100010;
     else if (opcode == "vrem.vx")
         funct6 = 0b100011;
+    else if (opcode == "vmseq.vx")
+        funct6 = 0b011000;
+    else if (opcode == "vmsne.vx")
+        funct6 = 0b011001;
+    else if (opcode == "vmsltu.vx")
+        funct6 = 0b011010;
+    else if (opcode == "vmslt.vx")
+        funct6 = 0b011011;
+    else if (opcode == "vmsleu.vx")
+        funct6 = 0b011100;
+    else if (opcode == "vmsle.vx")
+        funct6 = 0b011101;
+    else if (opcode == "vmsgtu.vx")
+        funct6 = 0b011110;
+    else if (opcode == "vmsgt.vx")
+        funct6 = 0b011111;
     else
         throw std::runtime_error("Unsupported vector instruction: " + opcode);
 
@@ -347,7 +398,11 @@ uint32_t generateVectorVXTypeMachineCode(const ICUnit &block)
         (opcode == "vmul.vx" || opcode == "vmulh.vx" ||
          opcode == "vmulhu.vx" || opcode == "vmulhsu.vx" ||
          opcode == "vdiv.vx" || opcode == "vdivu.vx" ||
-         opcode == "vrem.vx" || opcode == "vremu.vx");
+         opcode == "vrem.vx" || opcode == "vremu.vx" ||
+         opcode == "vmseq.vx" || opcode == "vmsne.vx" ||
+         opcode == "vmsltu.vx" || opcode == "vmslt.vx" ||
+         opcode == "vmsleu.vx" || opcode == "vmsle.vx" ||
+         opcode == "vmsgtu.vx" || opcode == "vmsgt.vx");
     const uint32_t funct3 = is_opmvx ? 0b110 : 0b100;
     constexpr uint32_t opcodeBits = 0b1010111;
 
@@ -379,6 +434,18 @@ uint32_t generateVectorVITypeMachineCode(const ICUnit &block)
         funct6 = 0b101000;
     else if (opcode == "vsra.vi")
         funct6 = 0b101001;
+    else if (opcode == "vmseq.vi")
+        funct6 = 0b011000;
+    else if (opcode == "vmsne.vi")
+        funct6 = 0b011001;
+    else if (opcode == "vmsleu.vi")
+        funct6 = 0b011100;
+    else if (opcode == "vmsle.vi")
+        funct6 = 0b011101;
+    else if (opcode == "vmsgtu.vi")
+        funct6 = 0b011110;
+    else if (opcode == "vmsgt.vi")
+        funct6 = 0b011111;
     else
         throw std::runtime_error("Unsupported vector instruction: " + opcode);
 

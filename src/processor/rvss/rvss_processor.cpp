@@ -213,7 +213,8 @@ void RVSSProcessor::Execute()
         else if (funct6 == 0b100100 || funct6 == 0b100101 ||
                  funct6 == 0b100110 || funct6 == 0b100111 ||
                  funct6 == 0b100000 || funct6 == 0b100001 ||
-                 funct6 == 0b100010 || funct6 == 0b100011)
+                 funct6 == 0b100010 || funct6 == 0b100011 ||
+                 (funct6 >= 0b011000 && funct6 <= 0b011101))
         {
             ExecuteVectorArithmetic();
         }
@@ -559,6 +560,12 @@ void RVSSProcessor::ExecuteVectorArithmetic()
         case 0b100101: // vsll.vi
         case 0b101000: // vsrl.vi
         case 0b101001: // vsra.vi
+        case 0b011000: // vmseq.vi
+        case 0b011001: // vmsne.vi
+        case 0b011100: // vmsleu.vi
+        case 0b011101: // vmsle.vi
+        case 0b011110: // vmsgtu.vi
+        case 0b011111: // vmsgt.vi
             break;
 
         default:
@@ -569,6 +576,12 @@ void RVSSProcessor::ExecuteVectorArithmetic()
     {
         switch (funct6)
         {
+        case 0b011000: // vmseq.vv
+        case 0b011001: // vmsne.vv
+        case 0b011010: // vmsltu.vv
+        case 0b011011: // vmslt.vv
+        case 0b011100: // vmsleu.vv
+        case 0b011101: // vmsle.vv
         case 0b100000: // vdivu.vv
         case 0b100001: // vdiv.vv
         case 0b100010: // vremu.vv
@@ -587,6 +600,14 @@ void RVSSProcessor::ExecuteVectorArithmetic()
     {
         switch (funct6)
         {
+        case 0b011000: // vmseq.vx
+        case 0b011001: // vmsne.vx
+        case 0b011010: // vmsltu.vx
+        case 0b011011: // vmslt.vx
+        case 0b011100: // vmsleu.vx
+        case 0b011101: // vmsle.vx
+        case 0b011110: // vmsgtu.vx
+        case 0b011111: // vmsgt.vx
         case 0b100000: // vdivu.vx
         case 0b100001: // vdiv.vx
         case 0b100010: // vremu.vx
@@ -674,6 +695,22 @@ void RVSSProcessor::ExecuteVectorArithmetic()
         }
     };
 
+    auto write_mask_bit = [](RegisterFile::VectorRegister &reg,
+                             unsigned int index,
+                             bool value)
+    {
+        const unsigned int byte_index = index / 8;
+        const unsigned int bit_index = index % 8;
+        if (value)
+        {
+            reg[byte_index] |= static_cast<uint8_t>(1U << bit_index);
+        }
+        else
+        {
+            reg[byte_index] &= static_cast<uint8_t>(~(1U << bit_index));
+        }
+    };
+
     const uint64_t element_mask =
         (config.sew_bits == 64)
             ? UINT64_MAX
@@ -700,6 +737,12 @@ void RVSSProcessor::ExecuteVectorArithmetic()
         is_shift_op
             ? static_cast<uint64_t>(imm5_raw)
             : (static_cast<uint64_t>(simm5_signed) & element_mask);
+
+    const bool is_mask_dest =
+        (funct3 == 0b010 && funct6 >= 0b011000 && funct6 <= 0b011101) ||
+        (funct3 == 0b110 && funct6 >= 0b011000 && funct6 <= 0b011111) ||
+        (funct3 == 0b011 && (funct6 == 0b011000 || funct6 == 0b011001 ||
+                             (funct6 >= 0b011100 && funct6 <= 0b011111)));
 
     auto arithmetic_shift_right = [](uint64_t val, unsigned int shamt, unsigned int sew_bits) -> uint64_t
     {
@@ -986,11 +1029,21 @@ void RVSSProcessor::ExecuteVectorArithmetic()
             // Mask-undisturbed: retain the old destination value.
             if (config.mask_agnostic)
             {
-                write_element(
-                    vector_new_value_,
-                    static_cast<unsigned int>(i),
-                    element_bytes,
-                    element_mask);
+                if (is_mask_dest)
+                {
+                    write_mask_bit(
+                        vector_new_value_,
+                        static_cast<unsigned int>(i),
+                        true);
+                }
+                else
+                {
+                    write_element(
+                        vector_new_value_,
+                        static_cast<unsigned int>(i),
+                        element_bytes,
+                        element_mask);
+                }
             }
 
             continue;
@@ -1006,7 +1059,50 @@ void RVSSProcessor::ExecuteVectorArithmetic()
 
         uint64_t result = 0;
 
-        if (funct3 == 0b010 || funct3 == 0b110)
+        if (is_mask_dest)
+        {
+            bool comp_result = false;
+            switch (funct6)
+            {
+            case 0b011000: // vmseq
+                comp_result = (a == b);
+                break;
+
+            case 0b011001: // vmsne
+                comp_result = (a != b);
+                break;
+
+            case 0b011010: // vmsltu
+                comp_result = (a < b);
+                break;
+
+            case 0b011011: // vmslt
+                comp_result = signed_less(a, b, config.sew_bits);
+                break;
+
+            case 0b011100: // vmsleu
+                comp_result = (a <= b);
+                break;
+
+            case 0b011101: // vmsle
+                comp_result = !signed_less(b, a, config.sew_bits);
+                break;
+
+            case 0b011110: // vmsgtu
+                comp_result = (a > b);
+                break;
+
+            case 0b011111: // vmsgt
+                comp_result = signed_less(b, a, config.sew_bits);
+                break;
+            }
+
+            write_mask_bit(
+                vector_new_value_,
+                static_cast<unsigned int>(i),
+                comp_result);
+        }
+        else if (funct3 == 0b010 || funct3 == 0b110)
         {
             switch (funct6)
             {
@@ -1110,16 +1206,33 @@ void RVSSProcessor::ExecuteVectorArithmetic()
             }
         }
 
-        write_element(
-            vector_new_value_,
-            static_cast<unsigned int>(i),
-            element_bytes,
-            result & element_mask);
+        if (!is_mask_dest)
+        {
+            write_element(
+                vector_new_value_,
+                static_cast<unsigned int>(i),
+                element_bytes,
+                result & element_mask);
+        }
     }
 
     // Tail elements: [vl, VLMAX).
     // Prestart elements [0, vstart) remain undisturbed.
-    if (config.tail_agnostic)
+    if (is_mask_dest)
+    {
+        // RVV 1.0 (Sections 5.4 & 11.8): Mask destination tail elements in [vl, VLMAX)
+        // are ALWAYS tail-agnostic regardless of vta.
+        // For KITES, the deterministic choice is to set all tail bits in [vl, VLMAX) to 1.
+        // Bits beyond VLMAX remain undisturbed from vector_old_value_.
+        for (uint64_t i = vl; i < max_elements; i++)
+        {
+            write_mask_bit(
+                vector_new_value_,
+                static_cast<unsigned int>(i),
+                true);
+        }
+    }
+    else if (config.tail_agnostic)
     {
         for (uint64_t i = vl; i < max_elements; i++)
         {
@@ -1914,7 +2027,8 @@ void RVSSProcessor::WriteBack()
         else if (funct6 == 0b100100 || funct6 == 0b100101 ||
                  funct6 == 0b100110 || funct6 == 0b100111 ||
                  funct6 == 0b100000 || funct6 == 0b100001 ||
-                 funct6 == 0b100010 || funct6 == 0b100011)
+                 funct6 == 0b100010 || funct6 == 0b100011 ||
+                 (funct6 >= 0b011000 && funct6 <= 0b011101))
         {
             WriteBackVectorArithmetic();
         }

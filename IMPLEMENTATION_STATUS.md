@@ -2,9 +2,9 @@
 
 ## 1. Status summary
 
-**Latest known verification:** 373/373 tests passed (100% CTest pass rate).
+**Latest known verification:** 387/387 tests passed (100% CTest pass rate).
 
-The statuses below describe the implementation after Batch 5 integer division and remainder. A
+The statuses below describe the implementation after Batch 1 vector comparisons and Batch 5 integer division and remainder. A
 new contributor should run the full suite before making changes to
 confirm the current checkout still matches this baseline.
 
@@ -73,7 +73,9 @@ confirm the current checkout still matches this baseline.
   Additional arithmetic   Pending                 Saturating arithmetic,
   families                                        fixed-point arithmetic
 
-  Vector comparisons      Pending                 See Section 4
+  Vector comparisons      Complete                All 20 legal forms (.vv, .vx, .vi),
+                                                  packed mask vd, tail agnostic to
+                                                  VLMAX, SEW 8/16/32/64
 
   Vector mask logical     Pending                 See Section 4
   instructions                                    
@@ -199,6 +201,30 @@ Current implementation supports:
 - Masked execution (`vm=0`/`vm=1`), tail policies (`ta`/`tu`), mask policies (`ma`/`mu`), and delta undo/redo.
 - `vstart` boundary semantics including $vstart \ge vl$ handling where no elements (body or tail) are updated and `vstart` is reset to 0.
 
+### Vector comparison instructions
+
+-   `vmseq.vv`, `vmseq.vx`, `vmseq.vi` (equal)
+-   `vmsne.vv`, `vmsne.vx`, `vmsne.vi` (not equal)
+-   `vmsltu.vv`, `vmsltu.vx` (unsigned less than)
+-   `vmslt.vv`, `vmslt.vx` (signed less than)
+-   `vmsleu.vv`, `vmsleu.vx`, `vmsleu.vi` (unsigned less than or equal)
+-   `vmsle.vv`, `vmsle.vx`, `vmsle.vi` (signed less than or equal)
+-   `vmsgtu.vx`, `vmsgtu.vi` (unsigned greater than)
+-   `vmsgt.vx`, `vmsgt.vi` (signed greater than)
+
+Current implementation supports:
+- All 20 legal instruction/operand-form combinations (no unsupported forms like `.vi` for `vmslt`/`vmsltu` or `.vv` for `vmsgt`/`vmsgtu`).
+- Comparison result writes boolean predicate bits packed bit-by-bit into mask destination register `vd` (bit $i$ corresponds to element $i$).
+- Supported SEW = 8, 16, 32, 64; LMUL = m1; VLEN = 128.
+- Encodings: OPMVV (`funct3 = 010`), OPMVX (`funct3 = 110`), OPIVI (`funct3 = 011`).
+- Scalar operands in `.vx` variants are masked/truncated to active SEW and interpreted with instruction-specific signedness.
+- Immediate operands in `.vi` variants parse 5-bit signed immediate `simm5` in `[-16, 15]`, sign-extended to SEW bits.
+- Deterministic mask tail policy: mask destination is always tail-agnostic (tail bits in $[vl, VLMAX)$ are set to 1 regardless of `vta`); bits beyond $VLMAX$ remain strictly undisturbed.
+- Masking policy: inactive elements under `vm=0` remain undisturbed when `vma=0`, and are overwritten with 1 when `vma=1`.
+- Hazard-free register overlap: source registers (`vs1`, `vs2`, `rs1`) and execution mask (`v0`) are snapshotted prior to destination updates, ensuring safe execution even when $vd = v0$, $vd = vs1$, or $vd = vs2$.
+- Boundary semantics: $vstart \ge vl$ produces no body or tail modifications, leaves the destination register completely untouched, and resets `vstart` to 0 on writeback.
+- Full delta tracking and undo/redo support.
+
 ### Vector reduction
 
 -   `vredsum.vs`
@@ -244,23 +270,23 @@ The following are candidates for extension. Verify exact instruction
 encodings, operand forms, and semantics against the RVV 1.0
 specification before coding.
 
-### Priority A --- Vector comparisons
+### Priority A --- Vector comparisons (Implemented)
 
-Possible additions include:
-- `vmseq.vv`, `vmseq.vx`, `vmseq.vi`
-- `vmsne.vv`, `vmsne.vx`, `vmsne.vi`
-- `vmslt.vv`, `vmslt.vx`
-- `vmsltu.vv`, `vmsltu.vx`
-- `vmsle.vv`, `vmsle.vx`, `vmsle.vi`
-- `vmsleu.vv`, `vmsleu.vx`, `vmsleu.vi`
-- `vmsgt.vx`, `vmsgt.vi`
-- `vmsgtu.vx`
+Implemented additions (all 20 legal forms):
+- `vmseq.vv`, `vmseq.vx`, `vmseq.vi` (equal)
+- `vmsne.vv`, `vmsne.vx`, `vmsne.vi` (not equal)
+- `vmslt.vv`, `vmslt.vx` (signed less than)
+- `vmsltu.vv`, `vmsltu.vx` (unsigned less than)
+- `vmsle.vv`, `vmsle.vx`, `vmsle.vi` (signed less than or equal)
+- `vmsleu.vv`, `vmsleu.vx`, `vmsleu.vi` (unsigned less than or equal)
+- `vmsgt.vx`, `vmsgt.vi` (signed greater than)
+- `vmsgtu.vx`, `vmsgtu.vi` (unsigned greater than)
 
-Comparison instructions write predicate bits to a vector mask destination
-register (`vd`). Their destination semantics differ from ordinary vector
-arithmetic: result bits are packed into mask elements rather than written as
-full SEW-wide values. Carefully inspect mask-register representation, tail
-policies, and `v0` handling before implementation.
+Comparison instructions write boolean predicate bits to a vector mask destination
+register (`vd`) packed bit-by-bit. Tail bits in $[vl, VLMAX)$ are set to 1 (deterministic
+tail-agnostic implementation choice), while bits beyond $VLMAX$ remain undisturbed. Fully
+verified across SEW 8, 16, 32, 64, register overlaps ($vd=v0, vd=vs1, vd=vs2$), $vstart \ge vl$,
+and undo/redo.
 
 ### Priority B --- Vector mask logical operations
 

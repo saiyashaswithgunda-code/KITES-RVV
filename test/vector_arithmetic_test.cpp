@@ -19,6 +19,12 @@ void SetMask(RegisterFile &registers, uint8_t mask)
 {
     registers.WriteVregElement<uint8_t>(0, 0, mask);
 }
+
+bool ReadMaskBit(const RegisterFile &registers, unsigned int reg, unsigned int index)
+{
+    const uint8_t byte = registers.ReadVregElement<uint8_t>(reg, index / 8);
+    return ((byte >> (index % 8)) & 1) != 0;
+}
 // Encode: vsetvli x0, x1, eSEW, m1, tu, mu
 uint32_t EncodeVsetvli(
     unsigned int sew_bits,
@@ -3186,4 +3192,1003 @@ TEST(VectorArithmeticTest, VstartGreaterThanOrEqualToVLTailAgnosticAndUndoRedo)
         ExpectElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
         EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
     }
+}
+
+TEST(VectorComparisonTest, AllComparisonInstructionsVV)
+{
+    // SEW = 8: 16 elements (VLMAX = 16, avl = 16)
+    const std::vector<uint8_t> vs2_vals = {
+        10, 20, 246, 236, 0, 127, 128, 50,
+        10, 20, 246, 236, 0, 127, 128, 50
+    };
+    const std::vector<uint8_t> vs1_vals = {
+        10, 30, 246,  10, 0, 128, 127, 206,
+        15, 10,   0, 236, 255, 100, 156, 50
+    };
+
+    struct VVCase
+    {
+        uint32_t funct6;
+        uint8_t expected_b0;
+        uint8_t expected_b1;
+    };
+
+    const VVCase cases[] = {
+        {0b011000, 0x15, 0x88}, // vmseq.vv
+        {0b011001, 0xEA, 0x77}, // vmsne.vv
+        {0b011010, 0xA2, 0x51}, // vmsltu.vv
+        {0b011011, 0x4A, 0x45}, // vmslt.vv
+        {0b011100, 0xB7, 0xD9}, // vmsleu.vv
+        {0b011101, 0x5F, 0xCD}, // vmsle.vv
+    };
+
+    for (const auto &c : cases)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorProgram(
+            processor,
+            8,
+            16,
+            EncodeVectorVV(c.funct6, 3, 1, 2, 1, 0b010));
+
+        WriteElements<uint8_t>(processor.registers_, 1, vs2_vals);
+        WriteElements<uint8_t>(processor.registers_, 2, vs1_vals);
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0xAA);
+
+        processor.Step();
+
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), c.expected_b0);
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 1), c.expected_b1);
+        for (unsigned int b = 2; b < 16; ++b)
+        {
+            EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, b), 0xAA)
+                << "Byte " << b << " beyond VLMAX was unexpectedly modified";
+        }
+    }
+
+    // SEW = 16: 8 elements (VLMAX = 8, avl = 8)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        const std::vector<uint16_t> vs2_vals = {
+            100, 200, static_cast<uint16_t>(-500), static_cast<uint16_t>(-1000),
+            0, 32767, static_cast<uint16_t>(-32768), 5000
+        };
+        const std::vector<uint16_t> vs1_vals = {
+            100, 300, static_cast<uint16_t>(-500), 1000,
+            0, static_cast<uint16_t>(-32768), 32767, static_cast<uint16_t>(-5000)
+        };
+
+        LoadVectorProgram(processor, 16, 8, EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b010));
+        WriteElements<uint16_t>(processor.registers_, 1, vs2_vals);
+        WriteElements<uint16_t>(processor.registers_, 2, vs1_vals);
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0);
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x15);
+        for (unsigned int b = 1; b < 16; ++b)
+            EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, b), 0);
+    }
+
+    // SEW = 32: 4 elements (VLMAX = 4, avl = 4)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        const std::vector<uint32_t> vs2_vals = {
+            1000u, static_cast<uint32_t>(-5000), 0u, 100000u
+        };
+        const std::vector<uint32_t> vs1_vals = {
+            1000u, 5000u, static_cast<uint32_t>(-1), 50000u
+        };
+
+        LoadVectorProgram(processor, 32, 4, EncodeVectorVV(0b011011, 3, 1, 2, 1, 0b010)); // vmslt.vv
+        WriteElements<uint32_t>(processor.registers_, 1, vs2_vals);
+        WriteElements<uint32_t>(processor.registers_, 2, vs1_vals);
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0);
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0) & 0x0F, 0x02);
+    }
+
+    // SEW = 64: 2 elements (VLMAX = 2, avl = 2) - vmseq.vv
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        const std::vector<uint64_t> vs2_vals = {
+            static_cast<uint64_t>(-100LL), 500ULL
+        };
+        const std::vector<uint64_t> vs1_vals = {
+            200ULL, 500ULL
+        };
+
+        LoadVectorProgram(processor, 64, 2, EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b010)); // vmseq.vv
+        WriteElements<uint64_t>(processor.registers_, 1, vs2_vals);
+        WriteElements<uint64_t>(processor.registers_, 2, vs1_vals);
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0);
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0) & 0x03, 0x02);
+    }
+
+    // SEW = 64: 2 elements (VLMAX = 2, avl = 2) - vmslt.vv
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        const std::vector<uint64_t> vs2_vals = {
+            static_cast<uint64_t>(-100LL), 500ULL
+        };
+        const std::vector<uint64_t> vs1_vals = {
+            200ULL, 500ULL
+        };
+
+        LoadVectorProgram(processor, 64, 2, EncodeVectorVV(0b011011, 3, 1, 2, 1, 0b010)); // vmslt.vv
+        WriteElements<uint64_t>(processor.registers_, 1, vs2_vals);
+        WriteElements<uint64_t>(processor.registers_, 2, vs1_vals);
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0) & 0x03, 0x01);
+    }
+}
+
+TEST(VectorComparisonTest, AllComparisonInstructionsVX)
+{
+    // SEW = 8: 16 elements against scalar 30
+    const std::vector<uint8_t> vs2_vals = {
+        0, 5, 10, 15, 20, 25, 30, 35,
+        40, 45, 50, 55, 60, 65, 70, 75
+    };
+
+    struct VXCase
+    {
+        uint32_t funct6;
+        uint8_t expected_b0;
+        uint8_t expected_b1;
+    };
+
+    const VXCase cases[] = {
+        {0b011000, 0x40, 0x00}, // vmseq.vx (i=6)
+        {0b011001, 0xBF, 0xFF}, // vmsne.vx
+        {0b011010, 0x3F, 0x00}, // vmsltu.vx (i=0..5)
+        {0b011011, 0x3F, 0x00}, // vmslt.vx (i=0..5)
+        {0b011100, 0x7F, 0x00}, // vmsleu.vx (i=0..6)
+        {0b011101, 0x7F, 0x00}, // vmsle.vx (i=0..6)
+        {0b011110, 0x80, 0xFF}, // vmsgtu.vx (i=7..15)
+        {0b011111, 0x80, 0xFF}, // vmsgt.vx (i=7..15)
+    };
+
+    for (const auto &c : cases)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorProgram(
+            processor,
+            8,
+            16,
+            EncodeVectorVX(c.funct6, 3, 1, 2, 1, 0b110));
+
+        WriteElements<uint8_t>(processor.registers_, 1, vs2_vals);
+        processor.registers_.WriteGpr(2, 30);
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0);
+
+        processor.Step();
+
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), c.expected_b0);
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 1), c.expected_b1);
+    }
+
+    // Negative scalar test at SEW=16: x2 = -20
+    const std::vector<uint16_t> vs2_sew16 = {
+        10, static_cast<uint16_t>(-30), static_cast<uint16_t>(-20),
+        static_cast<uint16_t>(-10), 0, 5, static_cast<uint16_t>(-1), 20
+    };
+
+    // vmslt.vx: signed < -20 -> only -30 (i=1) -> 0b00000010 = 0x02
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorProgram(processor, 16, 8, EncodeVectorVX(0b011011, 3, 1, 2, 1, 0b110));
+        WriteElements<uint16_t>(processor.registers_, 1, vs2_sew16);
+        processor.registers_.WriteGpr(2, static_cast<uint64_t>(-20LL));
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x02);
+    }
+
+    // vmsgt.vx: signed > -20 -> 10 (i=0), -10 (i=3), 0 (i=4), 5 (i=5), -1 (i=6), 20 (i=7) -> 0xF9
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorProgram(processor, 16, 8, EncodeVectorVX(0b011111, 3, 1, 2, 1, 0b110));
+        WriteElements<uint16_t>(processor.registers_, 1, vs2_sew16);
+        processor.registers_.WriteGpr(2, static_cast<uint64_t>(-20LL));
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0xF9);
+    }
+
+    // SEW=64, avl=2, scalar = 100
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorProgram(processor, 64, 2, EncodeVectorVX(0b011110, 3, 1, 2, 1, 0b110)); // vmsgtu.vx
+        WriteElements<uint64_t>(processor.registers_, 1, {50ULL, 150ULL});
+        processor.registers_.WriteGpr(2, 100);
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0) & 0x03, 0x02);
+    }
+}
+
+TEST(VectorComparisonTest, AllComparisonInstructionsVI)
+{
+    const std::vector<uint8_t> vs2_vals = {
+        0, 1, 2, 3, 4, 5, 6, 7
+    };
+
+    struct VICase
+    {
+        uint32_t funct6;
+        uint8_t expected_b0;
+    };
+
+    const VICase cases[] = {
+        {0b011000, 0x08}, // vmseq.vi (i=3)
+        {0b011001, 0xF7}, // vmsne.vi
+        {0b011100, 0x0F}, // vmsleu.vi (i=0..3)
+        {0b011101, 0x0F}, // vmsle.vi (i=0..3)
+        {0b011110, 0xF0}, // vmsgtu.vi (i=4..7)
+        {0b011111, 0xF0}, // vmsgt.vi (i=4..7)
+    };
+
+    for (const auto &c : cases)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorProgram(
+            processor,
+            8,
+            8,
+            EncodeVectorVI(c.funct6, 3, 1, 3, 1));
+
+        WriteElements<uint8_t>(processor.registers_, 1, vs2_vals);
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0);
+
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), c.expected_b0);
+    }
+}
+
+TEST(VectorComparisonTest, ImmediateRangeAndSignExtensionVI)
+{
+    // Test A1: vmsleu.vi with simm5 = -1 SEW=8
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+        LoadVectorProgram(processor, 8, 8, EncodeVectorVI(0b011100, 3, 1, -1, 1));
+        WriteElements<uint8_t>(processor.registers_, 1, {0, 1, 50, 127, 128, 200, 254, 255});
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0xFF);
+    }
+
+    // Test A2: vmsleu.vi with simm5 = -1 SEW=16
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+        LoadVectorProgram(processor, 16, 8, EncodeVectorVI(0b011100, 3, 1, -1, 1));
+        WriteElements<uint16_t>(processor.registers_, 1, {0, 1, 500, 32767, 32768, 50000, 65534, 65535});
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0xFF);
+    }
+
+    // Test A3: vmsleu.vi with simm5 = -1 SEW=32
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+        LoadVectorProgram(processor, 32, 4, EncodeVectorVI(0b011100, 3, 1, -1, 1));
+        WriteElements<uint32_t>(processor.registers_, 1, {0u, 100u, 0x80000000u, 0xFFFFFFFFu});
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0) & 0x0F, 0x0F);
+    }
+
+    // Test A4: vmsleu.vi with simm5 = -1 SEW=64
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+        LoadVectorProgram(processor, 64, 2, EncodeVectorVI(0b011100, 3, 1, -1, 1));
+        WriteElements<uint64_t>(processor.registers_, 1, {0ULL, 0xFFFFFFFFFFFFFFFFULL});
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0) & 0x03, 0x03);
+    }
+
+    // Test B: vmsgtu.vi with simm5 = -1
+    // a > UINT_MAX is FALSE for all unsigned elements.
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+        LoadVectorProgram(processor, 8, 8, EncodeVectorVI(0b011110, 3, 1, -1, 1));
+        WriteElements<uint8_t>(processor.registers_, 1, {0, 1, 50, 127, 128, 200, 254, 255});
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x00);
+    }
+
+    // Test C: vmsle.vi with simm5 = -1 (signed a <= -1)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+        LoadVectorProgram(processor, 8, 8, EncodeVectorVI(0b011101, 3, 1, -1, 1));
+        WriteElements<uint8_t>(processor.registers_, 1, {
+            static_cast<uint8_t>(-10), static_cast<uint8_t>(-5),
+            static_cast<uint8_t>(-2), static_cast<uint8_t>(-1),
+            0, 1, 2, 10
+        });
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x0F);
+    }
+
+    // Test D: vmsgt.vi with simm5 = -1 (signed a > -1)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+        LoadVectorProgram(processor, 8, 8, EncodeVectorVI(0b011111, 3, 1, -1, 1));
+        WriteElements<uint8_t>(processor.registers_, 1, {
+            static_cast<uint8_t>(-10), static_cast<uint8_t>(-5),
+            static_cast<uint8_t>(-2), static_cast<uint8_t>(-1),
+            0, 1, 2, 10
+        });
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0xF0);
+    }
+
+    // Test E1: Boundary immediate simm5 = -16
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+        LoadVectorProgram(processor, 8, 4, EncodeVectorVI(0b011101, 3, 1, -16, 1)); // vmsle.vi
+        WriteElements<uint8_t>(processor.registers_, 1, {
+            static_cast<uint8_t>(-20), static_cast<uint8_t>(-16),
+            static_cast<uint8_t>(-15), 0
+        });
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0) & 0x0F, 0x03);
+    }
+
+    // Test E2: Boundary immediate simm5 = 15
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+        LoadVectorProgram(processor, 8, 4, EncodeVectorVI(0b011101, 3, 1, 15, 1)); // vmsle.vi
+        WriteElements<uint8_t>(processor.registers_, 1, {10, 15, 16, 20});
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0) & 0x0F, 0x03);
+    }
+}
+
+TEST(VectorComparisonTest, ScalarTruncationAndSignednessVX)
+{
+    // SEW = 8: scalar has nonzero upper bits 0xAAAAAAAAAAAA01FFULL.
+    // Truncated 8-bit value is 0xFF (-1 signed, 255 unsigned).
+    const uint64_t scalar8 = 0xAAAAAAAAAAAA01FFULL;
+    const std::vector<uint8_t> vs2_vals8 = {
+        0, 100, 254, 255,
+        static_cast<uint8_t>(-2), static_cast<uint8_t>(-1), 50, 128
+    };
+
+    // vmseq.vx: matches 0xFF (255 and -1, indices 3 and 5) -> 0b00101000 = 0x28
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+        LoadVectorProgram(processor, 8, 8, EncodeVectorVX(0b011000, 3, 1, 2, 1, 0b110));
+        WriteElements<uint8_t>(processor.registers_, 1, vs2_vals8);
+        processor.registers_.WriteGpr(2, scalar8);
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x28);
+    }
+
+    // vmsltu.vx: unsigned < 255 -> indices 0, 1, 2, 4 (-2 is 254), 6, 7 -> 0b11010111 = 0xD7
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+        LoadVectorProgram(processor, 8, 8, EncodeVectorVX(0b011010, 3, 1, 2, 1, 0b110));
+        WriteElements<uint8_t>(processor.registers_, 1, vs2_vals8);
+        processor.registers_.WriteGpr(2, scalar8);
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0xD7);
+    }
+
+    // vmslt.vx: signed < -1 -> -2 (i=2, 4) and -128 (i=7) -> 0b10010100 = 0x94
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+        LoadVectorProgram(processor, 8, 8, EncodeVectorVX(0b011011, 3, 1, 2, 1, 0b110));
+        WriteElements<uint8_t>(processor.registers_, 1, vs2_vals8);
+        processor.registers_.WriteGpr(2, scalar8);
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x94);
+    }
+
+    // vmsgtu.vx: unsigned > 255 -> none (0x00)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+        LoadVectorProgram(processor, 8, 8, EncodeVectorVX(0b011110, 3, 1, 2, 1, 0b110));
+        WriteElements<uint8_t>(processor.registers_, 1, vs2_vals8);
+        processor.registers_.WriteGpr(2, scalar8);
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x00);
+    }
+
+    // vmsgt.vx: signed > -1 -> elements >= 0: 0 (i=0), 100 (i=1), 50 (i=6) -> 0b01000011 = 0x43
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+        LoadVectorProgram(processor, 8, 8, EncodeVectorVX(0b011111, 3, 1, 2, 1, 0b110));
+        WriteElements<uint8_t>(processor.registers_, 1, vs2_vals8);
+        processor.registers_.WriteGpr(2, scalar8);
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x43);
+    }
+
+    // SEW = 16: scalar 0xAAAAAAAAAAAA8000ULL. Low 16-bit is 0x8000 (-32768 signed, 32768 unsigned).
+    const uint64_t scalar16 = 0xAAAAAAAAAAAA8000ULL;
+    const std::vector<uint16_t> vs2_vals16 = {
+        0, 100, 32767, 32768,
+        static_cast<uint16_t>(-32768), static_cast<uint16_t>(-1), 5000, 10000
+    };
+
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+        LoadVectorProgram(processor, 16, 8, EncodeVectorVX(0b011000, 3, 1, 2, 1, 0b110));
+        WriteElements<uint16_t>(processor.registers_, 1, vs2_vals16);
+        processor.registers_.WriteGpr(2, scalar16);
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x18);
+    }
+
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+        LoadVectorProgram(processor, 16, 8, EncodeVectorVX(0b011011, 3, 1, 2, 1, 0b110));
+        WriteElements<uint16_t>(processor.registers_, 1, vs2_vals16);
+        processor.registers_.WriteGpr(2, scalar16);
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x00);
+    }
+
+    // SEW = 32: scalar 0xAAAAAAAA80000000ULL. Low 32-bit is 0x80000000.
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+        const uint64_t scalar32 = 0xAAAAAAAA80000000ULL;
+        const std::vector<uint32_t> vs2_vals32 = {
+            0u, 0x80000000u, 0x7FFFFFFFu, 0xFFFFFFFFu
+        };
+
+        LoadVectorProgram(processor, 32, 4, EncodeVectorVX(0b011000, 3, 1, 2, 1, 0b110));
+        WriteElements<uint32_t>(processor.registers_, 1, vs2_vals32);
+        processor.registers_.WriteGpr(2, scalar32);
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0) & 0x0F, 0x02);
+    }
+}
+
+TEST(VectorComparisonTest, MaskDestinationTailPolicyAlwaysTailAgnostic)
+{
+    // Test A: SEW=8, avl = 10 < VLMAX = 16.
+    // Case 1: vta = false (tail undisturbed in vtype).
+    // Tail bits in [vl, VLMAX) = [10, 16) MUST still be set to 1!
+    // Bits beyond VLMAX (bytes 2..15) must remain undisturbed (0x00).
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false),
+            EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b010) // vmseq.vv v3, v1, v2
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 10);
+        processor.Step();
+
+        std::vector<uint8_t> vals(16, 42);
+        WriteElements<uint8_t>(processor.registers_, 1, vals);
+        WriteElements<uint8_t>(processor.registers_, 2, vals);
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x00);
+
+        processor.Step();
+
+        // Active bits 0..9: 1
+        // Tail bits 10..15: 1 (always tail-agnostic!)
+        // Byte 0: 0xFF (bits 0..7)
+        // Byte 1: 0xFF (bits 8..9 are 1, tail bits 10..15 are 1)
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0xFF);
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 1), 0xFF);
+
+        // Bytes 2..15 beyond VLMAX MUST remain undisturbed 0x00
+        for (unsigned int b = 2; b < 16; ++b)
+        {
+            EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, b), 0x00)
+                << "Byte " << b << " beyond VLMAX was unexpectedly modified under vta=false";
+        }
+    }
+
+    // Case 2: Active elements all UNEQUAL (bits 0..9 are 0), vta = false
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false),
+            EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b010)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 10);
+        processor.Step();
+
+        std::vector<uint8_t> vals1(16, 42);
+        std::vector<uint8_t> vals2(16, 99);
+        WriteElements<uint8_t>(processor.registers_, 1, vals1);
+        WriteElements<uint8_t>(processor.registers_, 2, vals2);
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x00);
+
+        processor.Step();
+
+        // Active bits 0..9: 0
+        // Tail bits 10..15: 1
+        // Byte 0: 0x00
+        // Byte 1: bits 8..9 are 0, bits 10..15 are 1 -> 0b11111100 = 0xFC
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x00);
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 1), 0xFC);
+
+        for (unsigned int b = 2; b < 16; ++b)
+        {
+            EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, b), 0x00);
+        }
+    }
+
+    // Case 3: Same with vta = true
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, true, false),
+            EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b010)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 10);
+        processor.Step();
+
+        std::vector<uint8_t> vals1(16, 42);
+        std::vector<uint8_t> vals2(16, 99);
+        WriteElements<uint8_t>(processor.registers_, 1, vals1);
+        WriteElements<uint8_t>(processor.registers_, 2, vals2);
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x00);
+
+        processor.Step();
+
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x00);
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 1), 0xFC);
+
+        for (unsigned int b = 2; b < 16; ++b)
+        {
+            EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, b), 0x00);
+        }
+    }
+
+    // Test B: SEW=16, avl = 5 < VLMAX = 8.
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(16, false, false),
+            EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b010)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 5);
+        processor.Step();
+
+        std::vector<uint16_t> vals1(8, 10);
+        std::vector<uint16_t> vals2(8, 20);
+        WriteElements<uint16_t>(processor.registers_, 1, vals1);
+        WriteElements<uint16_t>(processor.registers_, 2, vals2);
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x00);
+
+        processor.Step();
+
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0xE0);
+        for (unsigned int b = 1; b < 16; ++b)
+        {
+            EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, b), 0x00);
+        }
+    }
+}
+
+TEST(VectorComparisonTest, MaskingPoliciesUndisturbedAndAgnostic)
+{
+    // Part A1: vma = false (mask undisturbed), initial vd = 0x00.
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false), // tu, mu
+            EncodeVectorVV(0b011000, 3, 1, 2, 0, 0b010) // vmseq.vv v3, v1, v2, v0.t (vm = 0)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        std::vector<uint8_t> vals(16, 42);
+        WriteElements<uint8_t>(processor.registers_, 1, vals);
+        WriteElements<uint8_t>(processor.registers_, 2, vals);
+
+        SetMask(processor.registers_, 0x55);
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x00);
+
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x55);
+    }
+
+    // Part A2: vma = false (mask undisturbed), initial vd = 0xAA (odd bits 1).
+    // Active even bits become 1, inactive odd bits retain 1 -> 0xFF
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false), // tu, mu
+            EncodeVectorVV(0b011000, 3, 1, 2, 0, 0b010) // vmseq.vv v3, v1, v2, v0.t (vm = 0)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        std::vector<uint8_t> vals(16, 42);
+        WriteElements<uint8_t>(processor.registers_, 1, vals);
+        WriteElements<uint8_t>(processor.registers_, 2, vals);
+        SetMask(processor.registers_, 0x55);
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0xAA);
+
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0xFF);
+    }
+
+    // Part B: vma = true (mask agnostic).
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, true), // tu, ma (mask agnostic)
+            EncodeVectorVV(0b011000, 3, 1, 2, 0, 0b010) // vmseq.vv v3, v1, v2, v0.t
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        // Elements UNEQUAL: active even elements evaluate to 0
+        std::vector<uint8_t> vals1(16, 10);
+        std::vector<uint8_t> vals2(16, 20);
+        WriteElements<uint8_t>(processor.registers_, 1, vals1);
+        WriteElements<uint8_t>(processor.registers_, 2, vals2);
+        SetMask(processor.registers_, 0x55);
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x00);
+
+        processor.Step();
+
+        // Active even bits: 0 (unequal)
+        // Inactive odd bits: 1 (mask-agnostic writes 1)
+        // Result byte 0: 0b10101010 = 0xAA
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0xAA);
+    }
+}
+
+TEST(VectorComparisonTest, DestinationSourceRegisterOverlap)
+{
+    // Subtest A: vd = v0, unmasked (vm = 1)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false),
+            EncodeVectorVV(0b011000, 0, 1, 2, 1, 0b010) // vmseq.vv v0, v1, v2
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        std::vector<uint8_t> vals1 = {1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0, 0, 0, 0, 0};
+        std::vector<uint8_t> vals2 = {1, 9, 3, 9, 5, 9, 7, 9, 0, 0, 0, 0, 0, 0, 0, 0};
+        WriteElements<uint8_t>(processor.registers_, 1, vals1);
+        WriteElements<uint8_t>(processor.registers_, 2, vals2);
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(0, b, 0x00);
+
+        processor.Step();
+
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(0, 0), 0x55);
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(0, 1), 0xFF);
+    }
+
+    // Subtest B: vd = v0, masked (vm = 0), vma = false (mask undisturbed)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false),
+            EncodeVectorVV(0b011000, 0, 1, 2, 0, 0b010)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        std::vector<uint8_t> vals(16, 42);
+        WriteElements<uint8_t>(processor.registers_, 1, vals);
+        WriteElements<uint8_t>(processor.registers_, 2, vals);
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(0, b, 0x00);
+        processor.registers_.WriteVregElement<uint8_t>(0, 0, 0x0F);
+
+        processor.Step();
+
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(0, 0), 0x0F);
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(0, 1), 0xFF);
+    }
+
+    // Subtest C: vd = v0, masked (vm = 0), vma = true (mask agnostic)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, true),
+            EncodeVectorVV(0b011000, 0, 1, 2, 0, 0b010)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        std::vector<uint8_t> vals1(16, 1);
+        std::vector<uint8_t> vals2(16, 2);
+        WriteElements<uint8_t>(processor.registers_, 1, vals1);
+        WriteElements<uint8_t>(processor.registers_, 2, vals2);
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(0, b, 0x00);
+        processor.registers_.WriteVregElement<uint8_t>(0, 0, 0x0F);
+
+        processor.Step();
+
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(0, 0), 0xF0);
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(0, 1), 0xFF);
+    }
+
+    // Subtest D: vd = vs1
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false),
+            EncodeVectorVV(0b011000, 2, 1, 2, 1, 0b010)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        std::vector<uint8_t> vals(16, 5);
+        WriteElements<uint8_t>(processor.registers_, 1, vals);
+        WriteElements<uint8_t>(processor.registers_, 2, vals);
+
+        processor.Step();
+
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(2, 0), 0xFF);
+    }
+
+    // Subtest E: vd = vs2
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false),
+            EncodeVectorVV(0b011000, 1, 1, 2, 1, 0b010)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        std::vector<uint8_t> vals(16, 5);
+        WriteElements<uint8_t>(processor.registers_, 1, vals);
+        WriteElements<uint8_t>(processor.registers_, 2, vals);
+
+        processor.Step();
+
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(1, 0), 0xFF);
+    }
+
+    // Subtest F: vd = vs1 = vs2
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false),
+            EncodeVectorVV(0b011000, 1, 1, 1, 1, 0b010)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        std::vector<uint8_t> vals(16, 77);
+        WriteElements<uint8_t>(processor.registers_, 1, vals);
+
+        processor.Step();
+
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(1, 0), 0xFF);
+    }
+}
+
+TEST(VectorComparisonTest, VstartBoundaries)
+{
+    // Subtest A: 0 < vstart < vl (vstart = 2, vl = 6, VLMAX = 8 at SEW=16)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(16, false, false),
+            EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b010)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 6);
+        processor.Step();
+
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 2);
+
+        std::vector<uint16_t> vals1(8, 10);
+        std::vector<uint16_t> vals2(8, 20);
+        WriteElements<uint16_t>(processor.registers_, 1, vals1);
+        WriteElements<uint16_t>(processor.registers_, 2, vals2);
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x00);
+        processor.registers_.WriteVregElement<uint8_t>(3, 0, 0x03);
+
+        processor.Step();
+
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0xC3);
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+
+    // Subtest B: vstart == vl
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, true, false), // ta = true
+            EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b010)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 4);
+        processor.Step();
+
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 4);
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, static_cast<uint8_t>(b + 1));
+
+        processor.Step();
+
+        for (unsigned int b = 0; b < 16; ++b)
+        {
+            EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, b), static_cast<uint8_t>(b + 1));
+        }
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+
+    // Subtest C: vstart > vl
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, true, false),
+            EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b010)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 4);
+        processor.Step();
+
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 6);
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, static_cast<uint8_t>(b + 10));
+
+        processor.Step();
+
+        for (unsigned int b = 0; b < 16; ++b)
+        {
+            EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, b), static_cast<uint8_t>(b + 10));
+        }
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+}
+
+TEST(VectorComparisonTest, UndoRedoCorrectness)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    Kites::AssembledProgram program;
+    program.text_buffer = {
+        EncodeVsetvli(8, false, false),
+        EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b010)
+    };
+    processor.LoadProgram(program);
+    processor.registers_.WriteGpr(1, 8);
+
+    for (unsigned int b = 0; b < 16; ++b)
+        processor.registers_.WriteVregElement<uint8_t>(3, b, 0x33);
+
+    std::vector<uint8_t> vals(16, 50);
+    WriteElements<uint8_t>(processor.registers_, 1, vals);
+    WriteElements<uint8_t>(processor.registers_, 2, vals);
+
+    processor.Step(); // vsetvli
+    EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VL), 8u);
+
+    processor.Step(); // vmseq.vv
+    EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0xFF);
+    EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+
+    // Undo -> destination restored to initial 0x33
+    processor.Undo();
+    EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x33);
+
+    // Redo -> destination re-applies 0xFF
+    processor.Redo();
+    EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0xFF);
+    EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
 }

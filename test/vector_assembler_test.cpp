@@ -779,3 +779,101 @@ TEST(VectorAssemblerTest, RejectsNonExistentDivisionImmediate)
     std::istringstream stream_vremu_vi("vremu.vi v1, v2, 3\n");
     EXPECT_THROW(Kites::assemble(stream_vremu_vi), std::runtime_error);
 }
+
+TEST(VectorAssemblerTest, EncodesAllVectorComparisonVVCorrectly)
+{
+    // funct3 = 010 (OPMVV)
+    // vmseq.vv  -> funct6 = 011000 (0x18)
+    EXPECT_EQ(assembleVectorVV("vmseq.vv v1, v2, v3\n"), 0x6221A0D7u);
+
+    // vmsne.vv  -> funct6 = 011001 (0x19)
+    EXPECT_EQ(assembleVectorVV("vmsne.vv v1, v2, v3\n"), 0x6621A0D7u);
+
+    // vmsltu.vv -> funct6 = 011010 (0x1A)
+    EXPECT_EQ(assembleVectorVV("vmsltu.vv v1, v2, v3\n"), 0x6A21A0D7u);
+
+    // vmslt.vv  -> funct6 = 011011 (0x1B)
+    EXPECT_EQ(assembleVectorVV("vmslt.vv v1, v2, v3\n"), 0x6E21A0D7u);
+
+    // vmsleu.vv -> funct6 = 011100 (0x1C)
+    EXPECT_EQ(assembleVectorVV("vmsleu.vv v1, v2, v3\n"), 0x7221A0D7u);
+
+    // vmsle.vv  -> funct6 = 011101 (0x1D)
+    EXPECT_EQ(assembleVectorVV("vmsle.vv v1, v2, v3\n"), 0x7621A0D7u);
+}
+
+TEST(VectorAssemblerTest, EncodesAllVectorComparisonVXCorrectly)
+{
+    // funct3 = 110 (OPMVX)
+    // vmseq.vx  -> funct6 = 011000 (0x18)
+    EXPECT_EQ(assembleVectorVX("vmseq.vx v1, v2, x3\n"), 0x6221E0D7u);
+
+    // vmsne.vx  -> funct6 = 011001 (0x19)
+    EXPECT_EQ(assembleVectorVX("vmsne.vx v1, v2, x3\n"), 0x6621E0D7u);
+
+    // vmsltu.vx -> funct6 = 011010 (0x1A)
+    EXPECT_EQ(assembleVectorVX("vmsltu.vx v1, v2, x3\n"), 0x6A21E0D7u);
+
+    // vmslt.vx  -> funct6 = 011011 (0x1B)
+    EXPECT_EQ(assembleVectorVX("vmslt.vx v1, v2, x3\n"), 0x6E21E0D7u);
+
+    // vmsleu.vx -> funct6 = 011100 (0x1C)
+    EXPECT_EQ(assembleVectorVX("vmsleu.vx v1, v2, x3\n"), 0x7221E0D7u);
+
+    // vmsle.vx  -> funct6 = 011101 (0x1D)
+    EXPECT_EQ(assembleVectorVX("vmsle.vx v1, v2, x3\n"), 0x7621E0D7u);
+
+    // vmsgtu.vx -> funct6 = 011110 (0x1E)
+    EXPECT_EQ(assembleVectorVX("vmsgtu.vx v1, v2, x3\n"), 0x7A21E0D7u);
+
+    // vmsgt.vx  -> funct6 = 011111 (0x1F)
+    EXPECT_EQ(assembleVectorVX("vmsgt.vx v1, v2, x3\n"), 0x7E21E0D7u);
+}
+
+TEST(VectorAssemblerTest, EncodesAllVectorComparisonVICorrectly)
+{
+    // funct3 = 011 (OPIVI)
+    // vmseq.vi  -> funct6 = 011000 (0x18), simm5 = 3
+    EXPECT_EQ(assembleVectorVI("vmseq.vi v1, v2, 3\n"), 0x6221B0D7u);
+
+    // vmsne.vi  -> funct6 = 011001 (0x19), simm5 = 3
+    EXPECT_EQ(assembleVectorVI("vmsne.vi v1, v2, 3\n"), 0x6621B0D7u);
+
+    // vmsleu.vi -> funct6 = 011100 (0x1C), simm5 = 3
+    EXPECT_EQ(assembleVectorVI("vmsleu.vi v1, v2, 3\n"), 0x7221B0D7u);
+
+    // vmsle.vi  -> funct6 = 011101 (0x1D), simm5 = 3
+    EXPECT_EQ(assembleVectorVI("vmsle.vi v1, v2, 3\n"), 0x7621B0D7u);
+
+    // vmsgtu.vi -> funct6 = 011110 (0x1E), simm5 = 3
+    EXPECT_EQ(assembleVectorVI("vmsgtu.vi v1, v2, 3\n"), 0x7A21B0D7u);
+
+    // vmsgt.vi  -> funct6 = 011111 (0x1F), simm5 = 3
+    EXPECT_EQ(assembleVectorVI("vmsgt.vi v1, v2, 3\n"), 0x7E21B0D7u);
+
+    // Negative immediate tests:
+    // vmseq.vi with simm5 = -1 (0x1F)
+    EXPECT_EQ(assembleVectorVI("vmseq.vi v1, v2, -1\n"), 0x622FB0D7u);
+
+    // vmsle.vi with simm5 = -16 (0x10)
+    EXPECT_EQ(assembleVectorVI("vmsle.vi v1, v2, -16\n"), 0x762830D7u);
+}
+
+TEST(VectorAssemblerTest, RejectsUnsupportedComparisonForms)
+{
+    Kites::setupVmStateDirectory();
+
+    // vmslt.vi and vmsltu.vi do not exist in RVV 1.0 (synthesized via vmsle[u].vi)
+    std::istringstream stream_vmslt_vi("vmslt.vi v1, v2, 3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmslt_vi), std::runtime_error);
+
+    std::istringstream stream_vmsltu_vi("vmsltu.vi v1, v2, 3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmsltu_vi), std::runtime_error);
+
+    // vmsgt.vv and vmsgtu.vv do not exist in RVV 1.0 (synthesized via vmslt[u].vv with swapped operands)
+    std::istringstream stream_vmsgt_vv("vmsgt.vv v1, v2, v3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmsgt_vv), std::runtime_error);
+
+    std::istringstream stream_vmsgtu_vv("vmsgtu.vv v1, v2, v3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmsgtu_vv), std::runtime_error);
+}

@@ -174,6 +174,68 @@
 
   `vrem.vx`     Vector-scalar signed    Yes         Yes         Yes         Yes Complete
                 remainder
+
+  `vmseq.vv`    Vector-vector equal     Yes         Yes         Yes         Yes Complete
+                comparison
+
+  `vmseq.vx`    Vector-scalar equal     Yes         Yes         Yes         Yes Complete
+                comparison
+
+  `vmseq.vi`    Vector-immediate equal  Yes         Yes         Yes         Yes Complete
+                comparison
+
+  `vmsne.vv`    Vector-vector not-equal Yes         Yes         Yes         Yes Complete
+                comparison
+
+  `vmsne.vx`    Vector-scalar not-equal Yes         Yes         Yes         Yes Complete
+                comparison
+
+  `vmsne.vi`    Vector-immediate        Yes         Yes         Yes         Yes Complete
+                not-equal comparison
+
+  `vmsltu.vv`   Vector-vector unsigned  Yes         Yes         Yes         Yes Complete
+                less-than comparison
+
+  `vmsltu.vx`   Vector-scalar unsigned  Yes         Yes         Yes         Yes Complete
+                less-than comparison
+
+  `vmslt.vv`    Vector-vector signed    Yes         Yes         Yes         Yes Complete
+                less-than comparison
+
+  `vmslt.vx`    Vector-scalar signed    Yes         Yes         Yes         Yes Complete
+                less-than comparison
+
+  `vmsleu.vv`   Vector-vector unsigned  Yes         Yes         Yes         Yes Complete
+                less-than-or-equal
+
+  `vmsleu.vx`   Vector-scalar unsigned  Yes         Yes         Yes         Yes Complete
+                less-than-or-equal
+
+  `vmsleu.vi`   Vector-immediate        Yes         Yes         Yes         Yes Complete
+                unsigned
+                less-than-or-equal
+
+  `vmsle.vv`    Vector-vector signed    Yes         Yes         Yes         Yes Complete
+                less-than-or-equal
+
+  `vmsle.vx`    Vector-scalar signed    Yes         Yes         Yes         Yes Complete
+                less-than-or-equal
+
+  `vmsle.vi`    Vector-immediate signed Yes         Yes         Yes         Yes Complete
+                less-than-or-equal
+
+  `vmsgtu.vx`   Vector-scalar unsigned  Yes         Yes         Yes         Yes Complete
+                greater-than comparison
+
+  `vmsgtu.vi`   Vector-immediate        Yes         Yes         Yes         Yes Complete
+                unsigned greater-than
+                comparison
+
+  `vmsgt.vx`    Vector-scalar signed    Yes         Yes         Yes         Yes Complete
+                greater-than comparison
+
+  `vmsgt.vi`    Vector-immediate signed Yes         Yes         Yes         Yes Complete
+                greater-than comparison
   -----------------------------------------------------------------------------------------
 
 ## 3. Pending arithmetic candidates
@@ -182,14 +244,12 @@ These are suggested additions, not a commitment that every instruction
 must be implemented. Check the RVV 1.0 specification before assigning or
 implementing them.
 
-  Instruction   Operation                           Suggested priority Status
-  ------------- --------------------------------- -------------------- ---------
-  `vmseq.vv`    Vector equality comparison                      Medium Pending
-  `vmsne.vv`    Vector inequality comparison                    Medium Pending
-  `vmslt.vv`    Signed less-than comparison                     Medium Pending
-  `vmsltu.vv`   Unsigned less-than comparison                   Medium Pending
-  `vmsle.vv`    Signed less-than-or-equal                       Medium Pending
-  `vmsleu.vv`   Unsigned less-than-or-equal                     Medium Pending
+All 20 legal forms of vector comparison instructions (`vmseq`, `vmsne`, `vmslt`,
+`vmsltu`, `vmsle`, `vmsleu`, `vmsgt`, `vmsgtu`) have been implemented in Batch 1.
+
+Additional candidate families for future implementation:
+- Saturating integer arithmetic (`vsadd`, `vssub`, etc.)
+- Integer merge/move (`vmerge`, `vmv`)
 
 Note: do not assume `vsub.vi` is a valid substitute for `vrsub.vi`.
 Verify mnemonic availability and operand semantics in the specification.
@@ -261,8 +321,13 @@ instruction or coherent instruction family.
                                  development2`           Reduction   sum reduction
                                                          Test        into vd[0]
 
-  Vector            Unassigned   ---         Pending     ---         Mask
-  comparisons                                                        destination
+  Vector            Completed    `rvv-       Complete    Vector-     All 20 legal
+  comparisons                    development2`           Arithmetic  forms (.vv/.vx/.vi),
+  (`vmseq`,                                              Test,       packed mask vd,
+  `vmsne`, `vmslt`,                                      Vector-     deterministic
+  `vmsltu`, `vmsle`,                                     Assembler   tail agnostic to
+  `vmsleu`, `vmsgt`,                                     Test        VLMAX, vstart>=vl,
+  `vmsgtu`)                                                          aliasing, SEW 8-64
 
   Mask logical      Unassigned   ---         Pending     ---         Packed mask
   operations                                                         bit
