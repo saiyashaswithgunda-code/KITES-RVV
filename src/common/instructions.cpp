@@ -114,6 +114,14 @@ std::unordered_map<Instruction, InstructionEncoding> instruction_encoding_map = 
     {Instruction::kvsse64_v,   {0b0100111, -1, 0b111, -1, -1, -1}},
     {Instruction::kvlm_v,      {0b0000111, -1, 0b000, -1, -1, -1}},
     {Instruction::kvsm_v,      {0b0100111, -1, 0b000, -1, -1, -1}},
+
+    {Instruction::kvredmax_vs,  {0b1010111, -1, 0b010, -1, 0b000111, -1}},
+    {Instruction::kvredmaxu_vs, {0b1010111, -1, 0b010, -1, 0b000110, -1}},
+    {Instruction::kvredmin_vs,  {0b1010111, -1, 0b010, -1, 0b000101, -1}},
+    {Instruction::kvredminu_vs, {0b1010111, -1, 0b010, -1, 0b000100, -1}},
+    {Instruction::kvredand_vs,  {0b1010111, -1, 0b010, -1, 0b000001, -1}},
+    {Instruction::kvredor_vs,   {0b1010111, -1, 0b010, -1, 0b000010, -1}},
+    {Instruction::kvredxor_vs,  {0b1010111, -1, 0b010, -1, 0b000011, -1}},
     
 
     {Instruction::kadd, {0b0110011, -1, 0b000, -1, -1, 0b0000000}},
@@ -381,6 +389,14 @@ std::unordered_map<std::string, Instruction> instruction_string_map = {
     {"vlm.v",     Instruction::kvlm_v},
     {"vsm.v",     Instruction::kvsm_v},
 
+    {"vredmax.vs",  Instruction::kvredmax_vs},
+    {"vredmaxu.vs", Instruction::kvredmaxu_vs},
+    {"vredmin.vs",  Instruction::kvredmin_vs},
+    {"vredminu.vs", Instruction::kvredminu_vs},
+    {"vredand.vs",  Instruction::kvredand_vs},
+    {"vredor.vs",   Instruction::kvredor_vs},
+    {"vredxor.vs",  Instruction::kvredxor_vs},
+
     {"add", Instruction::kadd},
     {"sub", Instruction::ksub},
     {"and", Instruction::kand},
@@ -577,6 +593,8 @@ static const std::unordered_set<std::string> valid_instructions = {
     "vlse8.v", "vlse16.v", "vlse32.v", "vlse64.v",
     "vsse8.v", "vsse16.v", "vsse32.v", "vsse64.v",
     "vlm.v", "vsm.v",
+    "vredmax.vs", "vredmaxu.vs", "vredmin.vs", "vredminu.vs",
+    "vredand.vs", "vredor.vs", "vredxor.vs",
 
     "add", "sub", "and", "or", "xor", "sll", "srl", "sra", "slt", "sltu", "addw", "subw", "sllw",
     "srlw", "sraw", "addi", "xori", "ori", "andi", "slli", "srli", "srai", "slti", "sltiu", "addiw",
@@ -1087,6 +1105,14 @@ std::unordered_map<std::string, std::vector<SyntaxType>> instruction_syntax_map 
     {"vsse64.v",  {SyntaxType::O_VREG_C_LP_GPR_RP_C_GPR}},
     {"vlm.v",     {SyntaxType::O_VREG_C_LP_GPR_RP}},
     {"vsm.v",     {SyntaxType::O_VREG_C_LP_GPR_RP}},
+
+    {"vredmax.vs",  {SyntaxType::O_VREG_C_VREG_C_VREG}},
+    {"vredmaxu.vs", {SyntaxType::O_VREG_C_VREG_C_VREG}},
+    {"vredmin.vs",  {SyntaxType::O_VREG_C_VREG_C_VREG}},
+    {"vredminu.vs", {SyntaxType::O_VREG_C_VREG_C_VREG}},
+    {"vredand.vs",  {SyntaxType::O_VREG_C_VREG_C_VREG}},
+    {"vredor.vs",   {SyntaxType::O_VREG_C_VREG_C_VREG}},
+    {"vredxor.vs",  {SyntaxType::O_VREG_C_VREG_C_VREG}},
     
 
     {"add", {SyntaxType::O_GPR_C_GPR_C_GPR}},

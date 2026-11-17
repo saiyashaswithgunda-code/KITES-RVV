@@ -206,7 +206,7 @@ void RVSSProcessor::Execute()
     if (opcode == 0x57 && funct3 == 0b010)
     {
         const uint8_t funct6 = (current_instruction_ >> 26) & 0x3F;
-        if (funct6 == 0b000000)
+        if (funct6 <= 0b000111)
         {
             ExecuteVectorReduction();
         }
@@ -1606,8 +1606,7 @@ void RVSSProcessor::ExecuteVectorReduction()
     const uint8_t vs1 = (current_instruction_ >> 15) & 0x1F;
     const uint8_t vs2 = (current_instruction_ >> 20) & 0x1F;
 
-    // Currently support only vredsum.vs.
-    if (funct6 != 0b000000)
+    if (funct6 > 0b000111)
         return;
 
     const uint64_t vtype =
@@ -1677,6 +1676,35 @@ void RVSSProcessor::ExecuteVectorReduction()
         }
     };
 
+    auto signed_less = [](uint64_t a, uint64_t b, unsigned int sew_bits) -> bool
+    {
+        switch (sew_bits)
+        {
+        case 8: {
+            const auto sa = std::bit_cast<int8_t>(static_cast<uint8_t>(a));
+            const auto sb = std::bit_cast<int8_t>(static_cast<uint8_t>(b));
+            return sa < sb;
+        }
+        case 16: {
+            const auto sa = std::bit_cast<int16_t>(static_cast<uint16_t>(a));
+            const auto sb = std::bit_cast<int16_t>(static_cast<uint16_t>(b));
+            return sa < sb;
+        }
+        case 32: {
+            const auto sa = std::bit_cast<int32_t>(static_cast<uint32_t>(a));
+            const auto sb = std::bit_cast<int32_t>(static_cast<uint32_t>(b));
+            return sa < sb;
+        }
+        case 64: {
+            const auto sa = std::bit_cast<int64_t>(a);
+            const auto sb = std::bit_cast<int64_t>(b);
+            return sa < sb;
+        }
+        default:
+            return false;
+        }
+    };
+
     const uint64_t element_mask =
         (config.sew_bits == 64)
             ? UINT64_MAX
@@ -1701,8 +1729,35 @@ void RVSSProcessor::ExecuteVectorReduction()
                          static_cast<unsigned int>(i),
                          element_bytes);
 
-        // Unsigned addition followed by SEW masking gives wraparound.
-        accumulator = (accumulator + element) & element_mask;
+        switch (funct6)
+        {
+        case 0b000000: // vredsum.vs
+            accumulator = (accumulator + element) & element_mask;
+            break;
+        case 0b000001: // vredand.vs
+            accumulator = (accumulator & element) & element_mask;
+            break;
+        case 0b000010: // vredor.vs
+            accumulator = (accumulator | element) & element_mask;
+            break;
+        case 0b000011: // vredxor.vs
+            accumulator = (accumulator ^ element) & element_mask;
+            break;
+        case 0b000100: // vredminu.vs
+            accumulator = (element < accumulator) ? element : accumulator;
+            break;
+        case 0b000101: // vredmin.vs
+            accumulator = signed_less(element, accumulator, config.sew_bits) ? element : accumulator;
+            break;
+        case 0b000110: // vredmaxu.vs
+            accumulator = (element > accumulator) ? element : accumulator;
+            break;
+        case 0b000111: // vredmax.vs
+            accumulator = signed_less(accumulator, element, config.sew_bits) ? element : accumulator;
+            break;
+        default:
+            return;
+        }
     }
 
     // Write the scalar reduction result into vd[0].
@@ -2404,7 +2459,7 @@ void RVSSProcessor::WriteBack()
     if (opcode == 0x57 && funct3 == 0b010)
     {
         const uint8_t funct6 = (current_instruction_ >> 26) & 0x3F;
-        if (funct6 == 0b000000)
+        if (funct6 <= 0b000111)
         {
             WriteBackVectorReduction();
         }

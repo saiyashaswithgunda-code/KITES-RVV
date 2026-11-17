@@ -118,6 +118,14 @@ enum class Instruction
     kvlm_v,
     kvsm_v,
 
+    kvredmax_vs,
+    kvredmaxu_vs,
+    kvredmin_vs,
+    kvredminu_vs,
+    kvredand_vs,
+    kvredor_vs,
+    kvredxor_vs,
+
     kadd,
     ksub,
     kand,

@@ -1093,3 +1093,121 @@ TEST(VectorAssemblerTest, RejectsInvalidVectorStridedAndMaskMemorySyntax)
     std::istringstream stream_vsm_masked("vsm.v v1, (x10), v0.t\n");
     EXPECT_THROW(Kites::assemble(stream_vsm_masked), std::runtime_error);
 }
+
+TEST(VectorAssemblerTest, EncodesAllVectorReductionInstructionsUnmasked)
+{
+    // vd = v4 (4), vs2 = v2 (2), vs1 = v3 (3), vm = 1, funct3 = 010, opcode = 0x57
+    EXPECT_EQ(assembleVectorReduction("vredsum.vs v4, v2, v3\n"),  0x0221A257u);
+    EXPECT_EQ(assembleVectorReduction("vredand.vs v4, v2, v3\n"),  0x0621A257u);
+    EXPECT_EQ(assembleVectorReduction("vredor.vs v4, v2, v3\n"),   0x0A21A257u);
+    EXPECT_EQ(assembleVectorReduction("vredxor.vs v4, v2, v3\n"),  0x0E21A257u);
+    EXPECT_EQ(assembleVectorReduction("vredminu.vs v4, v2, v3\n"), 0x1221A257u);
+    EXPECT_EQ(assembleVectorReduction("vredmin.vs v4, v2, v3\n"),  0x1621A257u);
+    EXPECT_EQ(assembleVectorReduction("vredmaxu.vs v4, v2, v3\n"), 0x1A21A257u);
+    EXPECT_EQ(assembleVectorReduction("vredmax.vs v4, v2, v3\n"),  0x1E21A257u);
+}
+
+TEST(VectorAssemblerTest, EncodesAllVectorReductionInstructionsMasked)
+{
+    // vd = v4 (4), vs2 = v2 (2), vs1 = v3 (3), vm = 0 (v0.t), funct3 = 010, opcode = 0x57
+    EXPECT_EQ(assembleVectorReduction("vredsum.vs v4, v2, v3, v0.t\n"),  0x0021A257u);
+    EXPECT_EQ(assembleVectorReduction("vredand.vs v4, v2, v3, v0.t\n"),  0x0421A257u);
+    EXPECT_EQ(assembleVectorReduction("vredor.vs v4, v2, v3, v0.t\n"),   0x0821A257u);
+    EXPECT_EQ(assembleVectorReduction("vredxor.vs v4, v2, v3, v0.t\n"),  0x0C21A257u);
+    EXPECT_EQ(assembleVectorReduction("vredminu.vs v4, v2, v3, v0.t\n"), 0x1021A257u);
+    EXPECT_EQ(assembleVectorReduction("vredmin.vs v4, v2, v3, v0.t\n"),  0x1421A257u);
+    EXPECT_EQ(assembleVectorReduction("vredmaxu.vs v4, v2, v3, v0.t\n"), 0x1821A257u);
+    EXPECT_EQ(assembleVectorReduction("vredmax.vs v4, v2, v3, v0.t\n"),  0x1C21A257u);
+}
+
+TEST(VectorAssemblerTest, EncodesVectorReductionZeroRegisters)
+{
+    EXPECT_EQ(assembleVectorReduction("vredsum.vs v0, v0, v0\n"),  0x02002057u);
+    EXPECT_EQ(assembleVectorReduction("vredmin.vs v0, v0, v0\n"),  0x16002057u);
+    EXPECT_EQ(assembleVectorReduction("vredmax.vs v0, v0, v0\n"),  0x1E002057u);
+    EXPECT_EQ(assembleVectorReduction("vredsum.vs v0, v0, v0, v0.t\n"), 0x00002057u);
+    EXPECT_EQ(assembleVectorReduction("vredmin.vs v0, v0, v0, v0.t\n"), 0x14002057u);
+    EXPECT_EQ(assembleVectorReduction("vredmax.vs v0, v0, v0, v0.t\n"), 0x1C002057u);
+}
+
+TEST(VectorAssemblerTest, ReconstructsDisassemblyForVectorReduction)
+{
+    Kites::setupVmStateDirectory();
+
+    const std::string source =
+        "vredmax.vs v4, v2, v3\n"
+        "vredmax.vs v4, v2, v3, v0.t\n"
+        "vredmin.vs v1, v5, v6\n"
+        "vredmin.vs v1, v5, v6, v0.t\n"
+        "vredand.vs v7, v8, v9\n"
+        "vredor.vs v10, v11, v12\n"
+        "vredxor.vs v13, v14, v15\n";
+
+    std::istringstream stream(source);
+    Kites::AssembledProgram program = Kites::assemble(stream);
+
+    auto disassembled = Kites::printIntermediateCode(program.intermediate_code);
+    ASSERT_EQ(disassembled.size(), 7u);
+
+    EXPECT_EQ(disassembled[0], "vredmax.vs v4, v2, v3");
+    EXPECT_EQ(disassembled[1], "vredmax.vs v4, v2, v3, v0.t");
+    EXPECT_EQ(disassembled[2], "vredmin.vs v1, v5, v6");
+    EXPECT_EQ(disassembled[3], "vredmin.vs v1, v5, v6, v0.t");
+    EXPECT_EQ(disassembled[4], "vredand.vs v7, v8, v9");
+    EXPECT_EQ(disassembled[5], "vredor.vs v10, v11, v12");
+    EXPECT_EQ(disassembled[6], "vredxor.vs v13, v14, v15");
+}
+
+TEST(VectorAssemblerTest, RejectsInvalidVectorReductionSyntax)
+{
+    Kites::setupVmStateDirectory();
+
+    // Scalar register in place of vector register
+    std::istringstream s1("vredmax.vs x1, v2, v3\n");
+    EXPECT_THROW(Kites::assemble(s1), std::runtime_error);
+
+    std::istringstream s2("vredmax.vs v1, x2, v3\n");
+    EXPECT_THROW(Kites::assemble(s2), std::runtime_error);
+
+    std::istringstream s3("vredmax.vs v1, v2, x3\n");
+    EXPECT_THROW(Kites::assemble(s3), std::runtime_error);
+
+    // Too few operands
+    std::istringstream s4("vredmax.vs v1, v2\n");
+    EXPECT_THROW(Kites::assemble(s4), std::runtime_error);
+
+    // Invalid mask register (only v0.t is allowed)
+    std::istringstream s5("vredmax.vs v1, v2, v3, v1.t\n");
+    EXPECT_THROW(Kites::assemble(s5), std::runtime_error);
+
+    std::istringstream s6("vredmax.vs v1, v2, v3, v0\n");
+    EXPECT_THROW(Kites::assemble(s6), std::runtime_error);
+
+    // Extra trailing tokens
+    std::istringstream s7("vredmax.vs v1, v2, v3, v0.t, v4\n");
+    EXPECT_THROW(Kites::assemble(s7), std::runtime_error);
+}
+
+TEST(VectorAssemblerTest, RejectsMaskedSyntaxForNonReductionInstructions)
+{
+    Kites::setupVmStateDirectory();
+
+    // vadd.vv with mask operand must be rejected
+    std::istringstream s1("vadd.vv v1, v2, v3, v0.t\n");
+    EXPECT_THROW(Kites::assemble(s1), std::runtime_error);
+
+    // vmseq.vv with mask operand must be rejected
+    std::istringstream s2("vmseq.vv v0, v1, v2, v0.t\n");
+    EXPECT_THROW(Kites::assemble(s2), std::runtime_error);
+
+    // Additional non-reduction vv instructions with mask operand must also be rejected
+    std::istringstream s3("vsub.vv v1, v2, v3, v0.t\n");
+    EXPECT_THROW(Kites::assemble(s3), std::runtime_error);
+
+    std::istringstream s4("vmul.vv v1, v2, v3, v0.t\n");
+    EXPECT_THROW(Kites::assemble(s4), std::runtime_error);
+
+    std::istringstream s5("vdiv.vv v1, v2, v3, v0.t\n");
+    EXPECT_THROW(Kites::assemble(s5), std::runtime_error);
+}
+

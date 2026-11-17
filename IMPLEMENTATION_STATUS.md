@@ -55,8 +55,10 @@ confirm the current checkout still matches this baseline.
                                                   vrem.[vv,vx],
                                                   vremu.[vv,vx]
 
-  Vector single-width     Complete                vredsum.vs across active
-  reduction                                       elements to vd[0]
+  Vector single-width     Complete                All eight single-width integer
+  reduction                                       reductions: vredsum.vs, vredmax.vs,
+                                                  vredmaxu.vs, vredmin.vs, vredminu.vs,
+                                                  vredand.vs, vredor.vs, vredxor.vs
 
   Unit-stride vector      Complete for current    Eight load/store
   memory                  subset                  variants
@@ -274,12 +276,27 @@ Current implementation supports:
 
 ### Vector reduction
 
--   `vredsum.vs`
+-   `vredsum.vs` (sum reduction)
+-   `vredmax.vs` (signed maximum reduction)
+-   `vredmaxu.vs` (unsigned maximum reduction)
+-   `vredmin.vs` (signed minimum reduction)
+-   `vredminu.vs` (unsigned minimum reduction)
+-   `vredand.vs` (bitwise AND reduction)
+-   `vredor.vs` (bitwise OR reduction)
+-   `vredxor.vs` (bitwise XOR reduction)
 
 Current implementation supports:
-- Sum reduction across active elements in `vs2` added to scalar element `vs1[0]`.
-- Result written to `vd[0]`.
-- Inactive elements beyond `vl` follow tail policy `vta`.
+- All 8 single-width integer vector reductions: active elements in `vs2` reduced into scalar element `vs1[0]`.
+- Reduction result scalar value written to `vd[0]`.
+- Tail elements $[1, \text{VLMAX})$ respect the tail policy `vta` (retaining undisturbed values when `vta=0`, filled with all 1s when `vta=1`).
+- Mask policy `vma` has no effect on reductions (inactive `vs2` elements are skipped; destination contains no masked-off elements).
+- Masked execution (`vm=0`, `v0.t`) across SEW = 8, 16, 32, 64; parser strictly restricts optional `, v0.t` only to the eight reduction instructions and rejects it for non-reduction instructions.
+- If all elements in $[0, vl)$ are masked off, `vd[0]` receives initial scalar `vs1[0]`.
+- Initial scalar `vs1[0]` is unconditionally reduced regardless of mask bit `v0[0]`.
+- Destination/mask register overlap (`vd == v0`) is safe under masked execution via mask snapshotting before execution.
+- $vl = 0$ performs no operation and preserves destination state.
+- Nonzero `vstart` safely returns early leaving architectural state unchanged.
+- Full delta undo/redo support.
 - Supported for SEW = 8, 16, 32, 64. LMUL = m1.
 
 ### Unit-stride vector memory
@@ -334,8 +351,8 @@ expands the scope:
     encodings invalid.
 3.  SEW is restricted to 8, 16, 32, and 64 bits.
 4.  Vector arithmetic currently supports the vector-vector, vector-scalar,
-    vector-immediate integer operations, and single-width sum reduction
-    listed above.
+    vector-immediate integer operations, and all eight single-width integer
+    vector reductions listed above.
 5.  Current memory support includes unit-stride, strided, and mask load/store operations (single-field nf=0, mew=0, mop=00/10). Indexed memory is not yet supported.
 6.  The current memory execution path uses the existing RVSS memory
     controller and current-delta tracking. Do not assume it already

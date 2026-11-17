@@ -74,6 +74,27 @@
 
   `vredsum.vs`  Vector sum reduction    Yes         Yes         Yes         Yes Complete
 
+  `vredmax.vs`  Vector signed max       Yes         Yes         Yes         Yes Complete
+                reduction
+
+  `vredmaxu.vs` Vector unsigned max     Yes         Yes         Yes         Yes Complete
+                reduction
+
+  `vredmin.vs`  Vector signed min       Yes         Yes         Yes         Yes Complete
+                reduction
+
+  `vredminu.vs` Vector unsigned min     Yes         Yes         Yes         Yes Complete
+                reduction
+
+  `vredand.vs`  Vector bitwise AND      Yes         Yes         Yes         Yes Complete
+                reduction
+
+  `vredor.vs`   Vector bitwise OR       Yes         Yes         Yes         Yes Complete
+                reduction
+
+  `vredxor.vs`  Vector bitwise XOR      Yes         Yes         Yes         Yes Complete
+                reduction
+
   `vle8.v`      Unit-stride             Yes         Yes         Yes         Yes Complete
                 load, EEW=8
 
@@ -385,9 +406,15 @@ instruction or coherent instruction family.
   `vmin[u]`,                     development2`           Arithmetic  signed compare,
   `vmax[u]`                                              Test        SEW 8/16/32/64
 
-  `vredsum.vs`      Completed    `rvv-       Complete    Vector-     Single-width
-                                 development2`           Reduction   sum reduction
-                                                         Test        into vd[0]
+  Single-width      Completed    `rvv-       Complete    Vector-     All 8 single-width
+  reductions                     development2`           Reduction   reductions (vredsum,
+  (`vredsum.vs`,                                         Test,       vredmax[u], vredmin[u],
+  `vredmax[u].vs`,                                       Vector-     vredand, vredor,
+  `vredmin[u].vs`,                                       Assembler   vredxor) into vd[0],
+  `vredand.vs`,                                          Test        OPMVV funct3=010,
+  `vredor.vs`,                                                       SEW 8/16/32/64,
+  `vredxor.vs`)                                                      vta tail, masked v0.t,
+                                                                     vd==v0 mask hazard safe
 
   Vector            Completed    `rvv-       Complete    Vector-     All 20 legal
   comparisons                    development2`           Arithmetic  forms (.vv/.vx/.vi),

@@ -86,7 +86,14 @@ bool isVectorMemoryInstruction(const std::string &opcode)
 }
 static bool isVectorReductionInstruction(const std::string &opcode)
 {
-    return opcode == "vredsum.vs";
+    return opcode == "vredsum.vs"  ||
+           opcode == "vredmax.vs"  ||
+           opcode == "vredmaxu.vs" ||
+           opcode == "vredmin.vs"  ||
+           opcode == "vredminu.vs" ||
+           opcode == "vredand.vs"  ||
+           opcode == "vredor.vs"   ||
+           opcode == "vredxor.vs";
 }
 bool isVectorVXInstruction(const std::string &opcode)
 {
@@ -165,6 +172,10 @@ printIntermediateCode(const std::vector<std::pair<ICUnit, bool>> &IntermediateCo
         {
             code = block.getOpcode() + " " + block.getRd() + ", " +
                 block.getRs2() + ", " + block.getRs1();
+            if (block.getRs3() == "v0.t")
+            {
+                code += ", v0.t";
+            }
         }
         else if (isVectorVXInstruction(block.getOpcode()))
         {
@@ -418,8 +429,28 @@ uint32_t generateVectorReductionMachineCode(const ICUnit &block)
     const uint32_t vs1 = extractRegisterIndex(block.getRs1());
     const uint32_t vs2 = extractRegisterIndex(block.getRs2());
 
-    constexpr uint32_t funct6 = 0b000000;
-    constexpr uint32_t vm = 1;
+    uint32_t funct6 = 0b000000;
+    const std::string &opcode = block.getOpcode();
+    if (opcode == "vredsum.vs")
+        funct6 = 0b000000;
+    else if (opcode == "vredand.vs")
+        funct6 = 0b000001;
+    else if (opcode == "vredor.vs")
+        funct6 = 0b000010;
+    else if (opcode == "vredxor.vs")
+        funct6 = 0b000011;
+    else if (opcode == "vredminu.vs")
+        funct6 = 0b000100;
+    else if (opcode == "vredmin.vs")
+        funct6 = 0b000101;
+    else if (opcode == "vredmaxu.vs")
+        funct6 = 0b000110;
+    else if (opcode == "vredmax.vs")
+        funct6 = 0b000111;
+    else
+        throw std::runtime_error("Unsupported vector reduction opcode: " + opcode);
+
+    const uint32_t vm = (block.getRs3() == "v0.t") ? 0 : 1;
     constexpr uint32_t funct3 = 0b010;
     constexpr uint32_t opcodeBits = 0b1010111;
 

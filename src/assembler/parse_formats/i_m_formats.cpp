@@ -647,11 +647,26 @@ bool Parser::parse_vsetvli()
     return true;
 }
 
+namespace
+{
+bool isVectorReductionMnemonic(const std::string &opcode)
+{
+    return opcode == "vredsum.vs"  ||
+           opcode == "vredmax.vs"  ||
+           opcode == "vredmaxu.vs" ||
+           opcode == "vredmin.vs"  ||
+           opcode == "vredminu.vs" ||
+           opcode == "vredand.vs"  ||
+           opcode == "vredor.vs"   ||
+           opcode == "vredxor.vs";
+}
+} // namespace
+
 bool Parser::parse_vector_vv()
 {
     const unsigned int line = currentToken().line_number;
 
-    // Validate: instruction vd, vs2, vs1
+    // Validate: instruction vd, vs2, vs1 [, v0.t]
     if (peekToken(1).line_number != line ||
         peekToken(1).type != TokenType::VEC_REGISTER ||
         peekToken(2).type != TokenType::COMMA ||
@@ -659,9 +674,7 @@ bool Parser::parse_vector_vv()
         peekToken(3).type != TokenType::VEC_REGISTER ||
         peekToken(4).type != TokenType::COMMA ||
         peekToken(5).line_number != line ||
-        peekToken(5).type != TokenType::VEC_REGISTER ||
-        (peekToken(6).type != TokenType::EOF_ &&
-         peekToken(6).line_number == line))
+        peekToken(5).type != TokenType::VEC_REGISTER)
     {
         return false;
     }
@@ -675,6 +688,26 @@ bool Parser::parse_vector_vv()
     block.setRd(peekToken(1).value);
     block.setRs2(peekToken(3).value);
     block.setRs1(peekToken(5).value);
+
+    // Check optional mask: , v0.t (only permitted for the 8 reduction instructions)
+    if (peekToken(6).type == TokenType::COMMA &&
+        peekToken(6).line_number == line)
+    {
+        if (!isVectorReductionMnemonic(block.getOpcode()) ||
+            peekToken(7).value != "v0.t" ||
+            peekToken(7).line_number != line ||
+            (peekToken(8).type != TokenType::EOF_ &&
+             peekToken(8).line_number == line))
+        {
+            return false;
+        }
+        block.setRs3("v0.t");
+    }
+    else if (peekToken(6).type != TokenType::EOF_ &&
+             peekToken(6).line_number == line)
+    {
+        return false;
+    }
 
     skipCurrentLine();
 
