@@ -210,11 +210,18 @@ void RVSSProcessor::Execute()
         {
             ExecuteVectorReduction();
         }
+        else if (funct6 >= 0b011000 && funct6 <= 0b011100)
+        {
+            ExecuteVectorMaskLogical();
+        }
+        else if (funct6 == 0b010100)
+        {
+            ExecuteVectorMaskPrefix();
+        }
         else if (funct6 == 0b100100 || funct6 == 0b100101 ||
                  funct6 == 0b100110 || funct6 == 0b100111 ||
                  funct6 == 0b100000 || funct6 == 0b100001 ||
-                 funct6 == 0b100010 || funct6 == 0b100011 ||
-                 (funct6 >= 0b011000 && funct6 <= 0b011101))
+                 funct6 == 0b100010 || funct6 == 0b100011)
         {
             ExecuteVectorArithmetic();
         }
@@ -525,6 +532,12 @@ void RVSSProcessor::ExecuteVectorArithmetic()
         case 0b100101: // vsll.vv
         case 0b101000: // vsrl.vv
         case 0b101001: // vsra.vv
+        case 0b011000: // vmseq.vv
+        case 0b011001: // vmsne.vv
+        case 0b011010: // vmsltu.vv
+        case 0b011011: // vmslt.vv
+        case 0b011100: // vmsleu.vv
+        case 0b011101: // vmsle.vv
             break;
 
         default:
@@ -545,6 +558,14 @@ void RVSSProcessor::ExecuteVectorArithmetic()
         case 0b100101: // vsll.vx
         case 0b101000: // vsrl.vx
         case 0b101001: // vsra.vx
+        case 0b011000: // vmseq.vx
+        case 0b011001: // vmsne.vx
+        case 0b011010: // vmsltu.vx
+        case 0b011011: // vmslt.vx
+        case 0b011100: // vmsleu.vx
+        case 0b011101: // vmsle.vx
+        case 0b011110: // vmsgtu.vx
+        case 0b011111: // vmsgt.vx
             break;
 
         default:
@@ -576,12 +597,6 @@ void RVSSProcessor::ExecuteVectorArithmetic()
     {
         switch (funct6)
         {
-        case 0b011000: // vmseq.vv
-        case 0b011001: // vmsne.vv
-        case 0b011010: // vmsltu.vv
-        case 0b011011: // vmslt.vv
-        case 0b011100: // vmsleu.vv
-        case 0b011101: // vmsle.vv
         case 0b100000: // vdivu.vv
         case 0b100001: // vdiv.vv
         case 0b100010: // vremu.vv
@@ -600,14 +615,6 @@ void RVSSProcessor::ExecuteVectorArithmetic()
     {
         switch (funct6)
         {
-        case 0b011000: // vmseq.vx
-        case 0b011001: // vmsne.vx
-        case 0b011010: // vmsltu.vx
-        case 0b011011: // vmslt.vx
-        case 0b011100: // vmsleu.vx
-        case 0b011101: // vmsle.vx
-        case 0b011110: // vmsgtu.vx
-        case 0b011111: // vmsgt.vx
         case 0b100000: // vdivu.vx
         case 0b100001: // vdiv.vx
         case 0b100010: // vremu.vx
@@ -739,8 +746,8 @@ void RVSSProcessor::ExecuteVectorArithmetic()
             : (static_cast<uint64_t>(simm5_signed) & element_mask);
 
     const bool is_mask_dest =
-        (funct3 == 0b010 && funct6 >= 0b011000 && funct6 <= 0b011101) ||
-        (funct3 == 0b110 && funct6 >= 0b011000 && funct6 <= 0b011111) ||
+        (funct3 == 0b000 && funct6 >= 0b011000 && funct6 <= 0b011101) ||
+        (funct3 == 0b100 && funct6 >= 0b011000 && funct6 <= 0b011111) ||
         (funct3 == 0b011 && (funct6 == 0b011000 || funct6 == 0b011001 ||
                              (funct6 >= 0b011100 && funct6 <= 0b011111)));
 
@@ -1246,6 +1253,197 @@ void RVSSProcessor::ExecuteVectorArithmetic()
 
     vector_arithmetic_pending_ = true;
 }
+
+void RVSSProcessor::ExecuteVectorMaskLogical()
+{
+    vector_arithmetic_pending_ = false;
+
+    const uint8_t funct6 = (current_instruction_ >> 26) & 0x3F;
+    const uint8_t vm     = (current_instruction_ >> 25) & 0x01;
+    vector_vd_           = (current_instruction_ >> 7)  & 0x1F;
+    const uint8_t vs1    = (current_instruction_ >> 15) & 0x1F;
+    const uint8_t vs2    = (current_instruction_ >> 20) & 0x1F;
+
+    // vm=0 is reserved for mask-logical instructions
+    if (vm != 1)
+        return;
+
+    const uint64_t vtype  = registers_.ReadCsr(RegisterFile::CSR_VTYPE);
+    const uint64_t vl     = registers_.ReadCsr(RegisterFile::CSR_VL);
+    const uint64_t vstart = registers_.ReadCsr(RegisterFile::CSR_VSTART);
+    const VectorConfig config = DecodeVectorConfig(vtype);
+
+    if (config.vill || vl > config.vlmax)
+    {
+        return;
+    }
+
+    vector_old_value_ = registers_.ReadVreg(vector_vd_);
+    vector_new_value_ = vector_old_value_;
+
+    // Strict vstart >= vl handling: no body or tail destination updates
+    if (vstart >= vl)
+    {
+        vector_arithmetic_pending_ = true;
+        return;
+    }
+
+    const RegisterFile::VectorRegister source1 = registers_.ReadVreg(vs1);
+    const RegisterFile::VectorRegister source2 = registers_.ReadVreg(vs2);
+
+    auto read_bit = [](const RegisterFile::VectorRegister &reg, unsigned int bit_idx) -> bool {
+        return ((reg[bit_idx / 8] >> (bit_idx % 8)) & 1) != 0;
+    };
+    auto set_bit = [](RegisterFile::VectorRegister &reg, unsigned int bit_idx, bool val) {
+        if (val)
+            reg[bit_idx / 8] |= static_cast<uint8_t>(1u << (bit_idx % 8));
+        else
+            reg[bit_idx / 8] &= static_cast<uint8_t>(~(1u << (bit_idx % 8)));
+    };
+
+    // Body: elements [vstart, vl)
+    for (uint64_t i = vstart; i < vl; ++i)
+    {
+        const bool b1 = read_bit(source1, static_cast<unsigned int>(i));
+        const bool b2 = read_bit(source2, static_cast<unsigned int>(i));
+        bool res = false;
+        switch (funct6)
+        {
+        case 0b011000: res = b2 && !b1; break; // vmandn.mm: vs2 & ~vs1
+        case 0b011001: res = b2 && b1;  break; // vmand.mm:  vs2 & vs1
+        case 0b011010: res = b2 || b1;  break; // vmor.mm:   vs2 | vs1
+        case 0b011011: res = b2 ^ b1;   break; // vmxor.mm:  vs2 ^ vs1
+        case 0b011100: res = b2 || !b1; break; // vmorn.mm:  vs2 | ~vs1
+        default: return;
+        }
+        set_bit(vector_new_value_, static_cast<unsigned int>(i), res);
+    }
+
+    // Tail policy applied only when vstart < vl: [vl, VLMAX) filled with 1s
+    for (uint64_t i = vl; i < config.vlmax; ++i)
+    {
+        set_bit(vector_new_value_, static_cast<unsigned int>(i), true);
+    }
+
+    vector_arithmetic_pending_ = true;
+}
+
+void RVSSProcessor::ExecuteVectorMaskPrefix()
+{
+    vector_arithmetic_pending_ = false;
+
+    const uint8_t funct6 = (current_instruction_ >> 26) & 0x3F;
+    const uint8_t vm     = (current_instruction_ >> 25) & 0x01;
+    vector_vd_           = (current_instruction_ >> 7)  & 0x1F;
+    const uint8_t vs1    = (current_instruction_ >> 15) & 0x1F;
+    const uint8_t vs2    = (current_instruction_ >> 20) & 0x1F;
+
+    const uint64_t vtype  = registers_.ReadCsr(RegisterFile::CSR_VTYPE);
+    const uint64_t vl     = registers_.ReadCsr(RegisterFile::CSR_VL);
+    const uint64_t vstart = registers_.ReadCsr(RegisterFile::CSR_VSTART);
+    const VectorConfig config = DecodeVectorConfig(vtype);
+
+    // Architectural illegal instruction checks (RVV 1.0 Section 15.2):
+    // 1. Nonzero vstart is illegal even when vl == 0
+    if (vstart != 0)
+        return;
+
+    // 2. vd cannot overlap vs2
+    if (vector_vd_ == vs2)
+        return;
+
+    // 3. vd cannot overlap v0 when masked
+    if (vm == 0 && vector_vd_ == 0)
+        return;
+
+    // 4. Exact prefix funct6 and vs1 mapping
+    if (funct6 != 0b010100 || (vs1 != 1 && vs1 != 2 && vs1 != 3))
+        return;
+
+    // Configuration validation
+    if (config.vill || vl > config.vlmax)
+    {
+        return;
+    }
+
+    vector_old_value_ = registers_.ReadVreg(vector_vd_);
+    vector_new_value_ = vector_old_value_;
+
+    // Edge case: vl == 0 leaves destination completely unchanged (no tail writes)
+    if (vl == 0)
+    {
+        vector_arithmetic_pending_ = true;
+        return;
+    }
+
+    const RegisterFile::VectorRegister mask_reg = registers_.ReadVreg(0);
+    const RegisterFile::VectorRegister source2  = registers_.ReadVreg(vs2);
+
+    auto read_bit = [](const RegisterFile::VectorRegister &reg, unsigned int bit_idx) -> bool {
+        return ((reg[bit_idx / 8] >> (bit_idx % 8)) & 1) != 0;
+    };
+    auto set_bit = [](RegisterFile::VectorRegister &reg, unsigned int bit_idx, bool val) {
+        if (val)
+            reg[bit_idx / 8] |= static_cast<uint8_t>(1u << (bit_idx % 8));
+        else
+            reg[bit_idx / 8] &= static_cast<uint8_t>(~(1u << (bit_idx % 8)));
+    };
+
+    bool found_first = false;
+    for (uint64_t i = 0; i < vl; ++i)
+    {
+        const unsigned int bit_idx = static_cast<unsigned int>(i);
+        const bool active = (vm == 1) || read_bit(mask_reg, bit_idx);
+
+        if (!active)
+        {
+            // Inactive elements do not participate in finding the first set bit.
+            if (config.mask_agnostic)
+                set_bit(vector_new_value_, bit_idx, true);
+            else
+                set_bit(vector_new_value_, bit_idx, read_bit(vector_old_value_, bit_idx));
+            continue;
+        }
+
+        // Only active elements participate in the prefix scan
+        const bool src_bit = read_bit(source2, bit_idx);
+        if (!found_first)
+        {
+            if (src_bit)
+            {
+                found_first = true;
+                if (vs1 == 1)      // vmsbf.m: set before first (this bit is 0)
+                    set_bit(vector_new_value_, bit_idx, false);
+                else if (vs1 == 2) // vmsof.m: set only first (this bit is 1)
+                    set_bit(vector_new_value_, bit_idx, true);
+                else if (vs1 == 3) // vmsif.m: set including first (this bit is 1)
+                    set_bit(vector_new_value_, bit_idx, true);
+            }
+            else
+            {
+                if (vs1 == 1)      // vmsbf.m: 1
+                    set_bit(vector_new_value_, bit_idx, true);
+                else if (vs1 == 2) // vmsof.m: 0
+                    set_bit(vector_new_value_, bit_idx, false);
+                else if (vs1 == 3) // vmsif.m: 1
+                    set_bit(vector_new_value_, bit_idx, true);
+            }
+        }
+        else
+        {
+            set_bit(vector_new_value_, bit_idx, false);
+        }
+    }
+
+    // Tail policy applied only when vl > 0: [vl, VLMAX) filled with 1s
+    for (uint64_t i = vl; i < config.vlmax; ++i)
+    {
+        set_bit(vector_new_value_, static_cast<unsigned int>(i), true);
+    }
+
+    vector_arithmetic_pending_ = true;
+}
+
 void RVSSProcessor::ExecuteVectorMemory()
 {
     vector_mem_pending_ = false;
@@ -2024,11 +2222,12 @@ void RVSSProcessor::WriteBack()
         {
             WriteBackVectorReduction();
         }
-        else if (funct6 == 0b100100 || funct6 == 0b100101 ||
+        else if ((funct6 >= 0b011000 && funct6 <= 0b011100) ||
+                 funct6 == 0b010100 ||
+                 funct6 == 0b100100 || funct6 == 0b100101 ||
                  funct6 == 0b100110 || funct6 == 0b100111 ||
                  funct6 == 0b100000 || funct6 == 0b100001 ||
-                 funct6 == 0b100010 || funct6 == 0b100011 ||
-                 (funct6 >= 0b011000 && funct6 <= 0b011101))
+                 funct6 == 0b100010 || funct6 == 0b100011)
         {
             WriteBackVectorArithmetic();
         }

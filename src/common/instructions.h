@@ -98,6 +98,15 @@ enum class Instruction
     kvmsgt_vx,
     kvmsgt_vi,
 
+    kvmandn_mm,
+    kvmand_mm,
+    kvmor_mm,
+    kvmxor_mm,
+    kvmorn_mm,
+    kvmsbf_m,
+    kvmsof_m,
+    kvmsif_m,
+
     kadd,
     ksub,
     kand,
@@ -492,6 +501,7 @@ enum class SyntaxType
     O_VREG_C_VREG_C_VREG, ///< Opcode vector-register, vector-register, vector-register
     O_VREG_C_VREG_C_GPR,  ///< Opcode vector-register, vector-register, general-register
     O_VREG_C_VREG_C_I,    ///< Opcode vector-register, vector-register, immediate
+    O_VREG_C_VREG,        ///< Opcode vector-register, vector-register [, v0.t]
 
     O_GPR_C_GPR_C_GPR,   ///< Opcode general-register , general-register , register
     O_GPR_C_GPR_C_I,     ///< Opcode general-register , general-register , immediate

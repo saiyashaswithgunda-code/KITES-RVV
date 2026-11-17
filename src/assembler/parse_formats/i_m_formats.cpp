@@ -685,6 +685,56 @@ bool Parser::parse_vector_vv()
     return true;
 }
 
+bool Parser::parse_vector_v()
+{
+    const unsigned int line = currentToken().line_number;
+
+    // Validate: instruction vd, vs2 [, v0.t]
+    if (peekToken(1).line_number != line ||
+        peekToken(1).type != TokenType::VEC_REGISTER ||
+        peekToken(2).type != TokenType::COMMA ||
+        peekToken(3).line_number != line ||
+        peekToken(3).type != TokenType::VEC_REGISTER)
+    {
+        return false;
+    }
+
+    ICUnit block;
+    block.setOpcode(currentToken().value);
+    block.setLineNumber(line);
+    block.setInstructionIndex(instruction_index_);
+
+    block.setRd(peekToken(1).value);
+    block.setRs2(peekToken(3).value);
+
+    // Check optional mask: , v0.t
+    if (peekToken(4).type == TokenType::COMMA &&
+        peekToken(4).line_number == line)
+    {
+        if (peekToken(5).value != "v0.t" ||
+            peekToken(5).line_number != line ||
+            (peekToken(6).type != TokenType::EOF_ &&
+             peekToken(6).line_number == line))
+        {
+            return false;
+        }
+        block.setRs3("v0.t");
+    }
+    else if (peekToken(4).type != TokenType::EOF_ &&
+             peekToken(4).line_number == line)
+    {
+        return false;
+    }
+
+    skipCurrentLine();
+
+    intermediate_code_.emplace_back(block, true);
+    instruction_number_line_number_mapping_[instruction_index_] = line;
+    instruction_index_++;
+
+    return true;
+}
+
 bool Parser::parse_vector_vx()
 {
     const unsigned int line = currentToken().line_number;

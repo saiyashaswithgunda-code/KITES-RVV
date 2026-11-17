@@ -3231,7 +3231,7 @@ TEST(VectorComparisonTest, AllComparisonInstructionsVV)
             processor,
             8,
             16,
-            EncodeVectorVV(c.funct6, 3, 1, 2, 1, 0b010));
+            EncodeVectorVV(c.funct6, 3, 1, 2, 1, 0b000));
 
         WriteElements<uint8_t>(processor.registers_, 1, vs2_vals);
         WriteElements<uint8_t>(processor.registers_, 2, vs1_vals);
@@ -3263,7 +3263,7 @@ TEST(VectorComparisonTest, AllComparisonInstructionsVV)
             0, static_cast<uint16_t>(-32768), 32767, static_cast<uint16_t>(-5000)
         };
 
-        LoadVectorProgram(processor, 16, 8, EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b010));
+        LoadVectorProgram(processor, 16, 8, EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b000));
         WriteElements<uint16_t>(processor.registers_, 1, vs2_vals);
         WriteElements<uint16_t>(processor.registers_, 2, vs1_vals);
         for (unsigned int b = 0; b < 16; ++b)
@@ -3286,7 +3286,7 @@ TEST(VectorComparisonTest, AllComparisonInstructionsVV)
             1000u, 5000u, static_cast<uint32_t>(-1), 50000u
         };
 
-        LoadVectorProgram(processor, 32, 4, EncodeVectorVV(0b011011, 3, 1, 2, 1, 0b010)); // vmslt.vv
+        LoadVectorProgram(processor, 32, 4, EncodeVectorVV(0b011011, 3, 1, 2, 1, 0b000)); // vmslt.vv
         WriteElements<uint32_t>(processor.registers_, 1, vs2_vals);
         WriteElements<uint32_t>(processor.registers_, 2, vs1_vals);
         for (unsigned int b = 0; b < 16; ++b)
@@ -3307,7 +3307,7 @@ TEST(VectorComparisonTest, AllComparisonInstructionsVV)
             200ULL, 500ULL
         };
 
-        LoadVectorProgram(processor, 64, 2, EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b010)); // vmseq.vv
+        LoadVectorProgram(processor, 64, 2, EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b000)); // vmseq.vv
         WriteElements<uint64_t>(processor.registers_, 1, vs2_vals);
         WriteElements<uint64_t>(processor.registers_, 2, vs1_vals);
         for (unsigned int b = 0; b < 16; ++b)
@@ -3328,7 +3328,7 @@ TEST(VectorComparisonTest, AllComparisonInstructionsVV)
             200ULL, 500ULL
         };
 
-        LoadVectorProgram(processor, 64, 2, EncodeVectorVV(0b011011, 3, 1, 2, 1, 0b010)); // vmslt.vv
+        LoadVectorProgram(processor, 64, 2, EncodeVectorVV(0b011011, 3, 1, 2, 1, 0b000)); // vmslt.vv
         WriteElements<uint64_t>(processor.registers_, 1, vs2_vals);
         WriteElements<uint64_t>(processor.registers_, 2, vs1_vals);
         processor.Step();
@@ -3371,7 +3371,7 @@ TEST(VectorComparisonTest, AllComparisonInstructionsVX)
             processor,
             8,
             16,
-            EncodeVectorVX(c.funct6, 3, 1, 2, 1, 0b110));
+            EncodeVectorVX(c.funct6, 3, 1, 2, 1, 0b100));
 
         WriteElements<uint8_t>(processor.registers_, 1, vs2_vals);
         processor.registers_.WriteGpr(2, 30);
@@ -3395,7 +3395,7 @@ TEST(VectorComparisonTest, AllComparisonInstructionsVX)
         Kites::setupVmStateDirectory();
         Processor processor;
 
-        LoadVectorProgram(processor, 16, 8, EncodeVectorVX(0b011011, 3, 1, 2, 1, 0b110));
+        LoadVectorProgram(processor, 16, 8, EncodeVectorVX(0b011011, 3, 1, 2, 1, 0b100));
         WriteElements<uint16_t>(processor.registers_, 1, vs2_sew16);
         processor.registers_.WriteGpr(2, static_cast<uint64_t>(-20LL));
         processor.Step();
@@ -3407,7 +3407,7 @@ TEST(VectorComparisonTest, AllComparisonInstructionsVX)
         Kites::setupVmStateDirectory();
         Processor processor;
 
-        LoadVectorProgram(processor, 16, 8, EncodeVectorVX(0b011111, 3, 1, 2, 1, 0b110));
+        LoadVectorProgram(processor, 16, 8, EncodeVectorVX(0b011111, 3, 1, 2, 1, 0b100));
         WriteElements<uint16_t>(processor.registers_, 1, vs2_sew16);
         processor.registers_.WriteGpr(2, static_cast<uint64_t>(-20LL));
         processor.Step();
@@ -3419,7 +3419,7 @@ TEST(VectorComparisonTest, AllComparisonInstructionsVX)
         Kites::setupVmStateDirectory();
         Processor processor;
 
-        LoadVectorProgram(processor, 64, 2, EncodeVectorVX(0b011110, 3, 1, 2, 1, 0b110)); // vmsgtu.vx
+        LoadVectorProgram(processor, 64, 2, EncodeVectorVX(0b011110, 3, 1, 2, 1, 0b100)); // vmsgtu.vx
         WriteElements<uint64_t>(processor.registers_, 1, {50ULL, 150ULL});
         processor.registers_.WriteGpr(2, 100);
         processor.Step();
@@ -3587,7 +3587,7 @@ TEST(VectorComparisonTest, ScalarTruncationAndSignednessVX)
     {
         Kites::setupVmStateDirectory();
         Processor processor;
-        LoadVectorProgram(processor, 8, 8, EncodeVectorVX(0b011000, 3, 1, 2, 1, 0b110));
+        LoadVectorProgram(processor, 8, 8, EncodeVectorVX(0b011000, 3, 1, 2, 1, 0b100));
         WriteElements<uint8_t>(processor.registers_, 1, vs2_vals8);
         processor.registers_.WriteGpr(2, scalar8);
         processor.Step();
@@ -3598,7 +3598,7 @@ TEST(VectorComparisonTest, ScalarTruncationAndSignednessVX)
     {
         Kites::setupVmStateDirectory();
         Processor processor;
-        LoadVectorProgram(processor, 8, 8, EncodeVectorVX(0b011010, 3, 1, 2, 1, 0b110));
+        LoadVectorProgram(processor, 8, 8, EncodeVectorVX(0b011010, 3, 1, 2, 1, 0b100));
         WriteElements<uint8_t>(processor.registers_, 1, vs2_vals8);
         processor.registers_.WriteGpr(2, scalar8);
         processor.Step();
@@ -3609,7 +3609,7 @@ TEST(VectorComparisonTest, ScalarTruncationAndSignednessVX)
     {
         Kites::setupVmStateDirectory();
         Processor processor;
-        LoadVectorProgram(processor, 8, 8, EncodeVectorVX(0b011011, 3, 1, 2, 1, 0b110));
+        LoadVectorProgram(processor, 8, 8, EncodeVectorVX(0b011011, 3, 1, 2, 1, 0b100));
         WriteElements<uint8_t>(processor.registers_, 1, vs2_vals8);
         processor.registers_.WriteGpr(2, scalar8);
         processor.Step();
@@ -3620,7 +3620,7 @@ TEST(VectorComparisonTest, ScalarTruncationAndSignednessVX)
     {
         Kites::setupVmStateDirectory();
         Processor processor;
-        LoadVectorProgram(processor, 8, 8, EncodeVectorVX(0b011110, 3, 1, 2, 1, 0b110));
+        LoadVectorProgram(processor, 8, 8, EncodeVectorVX(0b011110, 3, 1, 2, 1, 0b100));
         WriteElements<uint8_t>(processor.registers_, 1, vs2_vals8);
         processor.registers_.WriteGpr(2, scalar8);
         processor.Step();
@@ -3631,7 +3631,7 @@ TEST(VectorComparisonTest, ScalarTruncationAndSignednessVX)
     {
         Kites::setupVmStateDirectory();
         Processor processor;
-        LoadVectorProgram(processor, 8, 8, EncodeVectorVX(0b011111, 3, 1, 2, 1, 0b110));
+        LoadVectorProgram(processor, 8, 8, EncodeVectorVX(0b011111, 3, 1, 2, 1, 0b100));
         WriteElements<uint8_t>(processor.registers_, 1, vs2_vals8);
         processor.registers_.WriteGpr(2, scalar8);
         processor.Step();
@@ -3648,7 +3648,7 @@ TEST(VectorComparisonTest, ScalarTruncationAndSignednessVX)
     {
         Kites::setupVmStateDirectory();
         Processor processor;
-        LoadVectorProgram(processor, 16, 8, EncodeVectorVX(0b011000, 3, 1, 2, 1, 0b110));
+        LoadVectorProgram(processor, 16, 8, EncodeVectorVX(0b011000, 3, 1, 2, 1, 0b100));
         WriteElements<uint16_t>(processor.registers_, 1, vs2_vals16);
         processor.registers_.WriteGpr(2, scalar16);
         processor.Step();
@@ -3658,7 +3658,7 @@ TEST(VectorComparisonTest, ScalarTruncationAndSignednessVX)
     {
         Kites::setupVmStateDirectory();
         Processor processor;
-        LoadVectorProgram(processor, 16, 8, EncodeVectorVX(0b011011, 3, 1, 2, 1, 0b110));
+        LoadVectorProgram(processor, 16, 8, EncodeVectorVX(0b011011, 3, 1, 2, 1, 0b100));
         WriteElements<uint16_t>(processor.registers_, 1, vs2_vals16);
         processor.registers_.WriteGpr(2, scalar16);
         processor.Step();
@@ -3674,7 +3674,7 @@ TEST(VectorComparisonTest, ScalarTruncationAndSignednessVX)
             0u, 0x80000000u, 0x7FFFFFFFu, 0xFFFFFFFFu
         };
 
-        LoadVectorProgram(processor, 32, 4, EncodeVectorVX(0b011000, 3, 1, 2, 1, 0b110));
+        LoadVectorProgram(processor, 32, 4, EncodeVectorVX(0b011000, 3, 1, 2, 1, 0b100));
         WriteElements<uint32_t>(processor.registers_, 1, vs2_vals32);
         processor.registers_.WriteGpr(2, scalar32);
         processor.Step();
@@ -3695,7 +3695,7 @@ TEST(VectorComparisonTest, MaskDestinationTailPolicyAlwaysTailAgnostic)
         Kites::AssembledProgram program;
         program.text_buffer = {
             EncodeVsetvli(8, false, false),
-            EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b010) // vmseq.vv v3, v1, v2
+            EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b000) // vmseq.vv v3, v1, v2
         };
         processor.LoadProgram(program);
         processor.registers_.WriteGpr(1, 10);
@@ -3732,7 +3732,7 @@ TEST(VectorComparisonTest, MaskDestinationTailPolicyAlwaysTailAgnostic)
         Kites::AssembledProgram program;
         program.text_buffer = {
             EncodeVsetvli(8, false, false),
-            EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b010)
+            EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b000)
         };
         processor.LoadProgram(program);
         processor.registers_.WriteGpr(1, 10);
@@ -3768,7 +3768,7 @@ TEST(VectorComparisonTest, MaskDestinationTailPolicyAlwaysTailAgnostic)
         Kites::AssembledProgram program;
         program.text_buffer = {
             EncodeVsetvli(8, true, false),
-            EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b010)
+            EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b000)
         };
         processor.LoadProgram(program);
         processor.registers_.WriteGpr(1, 10);
@@ -3800,7 +3800,7 @@ TEST(VectorComparisonTest, MaskDestinationTailPolicyAlwaysTailAgnostic)
         Kites::AssembledProgram program;
         program.text_buffer = {
             EncodeVsetvli(16, false, false),
-            EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b010)
+            EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b000)
         };
         processor.LoadProgram(program);
         processor.registers_.WriteGpr(1, 5);
@@ -3833,7 +3833,7 @@ TEST(VectorComparisonTest, MaskingPoliciesUndisturbedAndAgnostic)
         Kites::AssembledProgram program;
         program.text_buffer = {
             EncodeVsetvli(8, false, false), // tu, mu
-            EncodeVectorVV(0b011000, 3, 1, 2, 0, 0b010) // vmseq.vv v3, v1, v2, v0.t (vm = 0)
+            EncodeVectorVV(0b011000, 3, 1, 2, 0, 0b000) // vmseq.vv v3, v1, v2, v0.t (vm = 0)
         };
         processor.LoadProgram(program);
         processor.registers_.WriteGpr(1, 8);
@@ -3861,7 +3861,7 @@ TEST(VectorComparisonTest, MaskingPoliciesUndisturbedAndAgnostic)
         Kites::AssembledProgram program;
         program.text_buffer = {
             EncodeVsetvli(8, false, false), // tu, mu
-            EncodeVectorVV(0b011000, 3, 1, 2, 0, 0b010) // vmseq.vv v3, v1, v2, v0.t (vm = 0)
+            EncodeVectorVV(0b011000, 3, 1, 2, 0, 0b000) // vmseq.vv v3, v1, v2, v0.t (vm = 0)
         };
         processor.LoadProgram(program);
         processor.registers_.WriteGpr(1, 8);
@@ -3886,7 +3886,7 @@ TEST(VectorComparisonTest, MaskingPoliciesUndisturbedAndAgnostic)
         Kites::AssembledProgram program;
         program.text_buffer = {
             EncodeVsetvli(8, false, true), // tu, ma (mask agnostic)
-            EncodeVectorVV(0b011000, 3, 1, 2, 0, 0b010) // vmseq.vv v3, v1, v2, v0.t
+            EncodeVectorVV(0b011000, 3, 1, 2, 0, 0b000) // vmseq.vv v3, v1, v2, v0.t
         };
         processor.LoadProgram(program);
         processor.registers_.WriteGpr(1, 8);
@@ -3921,7 +3921,7 @@ TEST(VectorComparisonTest, DestinationSourceRegisterOverlap)
         Kites::AssembledProgram program;
         program.text_buffer = {
             EncodeVsetvli(8, false, false),
-            EncodeVectorVV(0b011000, 0, 1, 2, 1, 0b010) // vmseq.vv v0, v1, v2
+            EncodeVectorVV(0b011000, 0, 1, 2, 1, 0b000) // vmseq.vv v0, v1, v2
         };
         processor.LoadProgram(program);
         processor.registers_.WriteGpr(1, 8);
@@ -3948,7 +3948,7 @@ TEST(VectorComparisonTest, DestinationSourceRegisterOverlap)
         Kites::AssembledProgram program;
         program.text_buffer = {
             EncodeVsetvli(8, false, false),
-            EncodeVectorVV(0b011000, 0, 1, 2, 0, 0b010)
+            EncodeVectorVV(0b011000, 0, 1, 2, 0, 0b000)
         };
         processor.LoadProgram(program);
         processor.registers_.WriteGpr(1, 8);
@@ -3976,7 +3976,7 @@ TEST(VectorComparisonTest, DestinationSourceRegisterOverlap)
         Kites::AssembledProgram program;
         program.text_buffer = {
             EncodeVsetvli(8, false, true),
-            EncodeVectorVV(0b011000, 0, 1, 2, 0, 0b010)
+            EncodeVectorVV(0b011000, 0, 1, 2, 0, 0b000)
         };
         processor.LoadProgram(program);
         processor.registers_.WriteGpr(1, 8);
@@ -4005,7 +4005,7 @@ TEST(VectorComparisonTest, DestinationSourceRegisterOverlap)
         Kites::AssembledProgram program;
         program.text_buffer = {
             EncodeVsetvli(8, false, false),
-            EncodeVectorVV(0b011000, 2, 1, 2, 1, 0b010)
+            EncodeVectorVV(0b011000, 2, 1, 2, 1, 0b000)
         };
         processor.LoadProgram(program);
         processor.registers_.WriteGpr(1, 8);
@@ -4028,7 +4028,7 @@ TEST(VectorComparisonTest, DestinationSourceRegisterOverlap)
         Kites::AssembledProgram program;
         program.text_buffer = {
             EncodeVsetvli(8, false, false),
-            EncodeVectorVV(0b011000, 1, 1, 2, 1, 0b010)
+            EncodeVectorVV(0b011000, 1, 1, 2, 1, 0b000)
         };
         processor.LoadProgram(program);
         processor.registers_.WriteGpr(1, 8);
@@ -4051,7 +4051,7 @@ TEST(VectorComparisonTest, DestinationSourceRegisterOverlap)
         Kites::AssembledProgram program;
         program.text_buffer = {
             EncodeVsetvli(8, false, false),
-            EncodeVectorVV(0b011000, 1, 1, 1, 1, 0b010)
+            EncodeVectorVV(0b011000, 1, 1, 1, 1, 0b000)
         };
         processor.LoadProgram(program);
         processor.registers_.WriteGpr(1, 8);
@@ -4076,7 +4076,7 @@ TEST(VectorComparisonTest, VstartBoundaries)
         Kites::AssembledProgram program;
         program.text_buffer = {
             EncodeVsetvli(16, false, false),
-            EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b010)
+            EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b000)
         };
         processor.LoadProgram(program);
         processor.registers_.WriteGpr(1, 6);
@@ -4107,7 +4107,7 @@ TEST(VectorComparisonTest, VstartBoundaries)
         Kites::AssembledProgram program;
         program.text_buffer = {
             EncodeVsetvli(8, true, false), // ta = true
-            EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b010)
+            EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b000)
         };
         processor.LoadProgram(program);
         processor.registers_.WriteGpr(1, 4);
@@ -4135,7 +4135,7 @@ TEST(VectorComparisonTest, VstartBoundaries)
         Kites::AssembledProgram program;
         program.text_buffer = {
             EncodeVsetvli(8, true, false),
-            EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b010)
+            EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b000)
         };
         processor.LoadProgram(program);
         processor.registers_.WriteGpr(1, 4);
@@ -4164,7 +4164,7 @@ TEST(VectorComparisonTest, UndoRedoCorrectness)
     Kites::AssembledProgram program;
     program.text_buffer = {
         EncodeVsetvli(8, false, false),
-        EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b010)
+        EncodeVectorVV(0b011000, 3, 1, 2, 1, 0b000)
     };
     processor.LoadProgram(program);
     processor.registers_.WriteGpr(1, 8);
@@ -4191,4 +4191,925 @@ TEST(VectorComparisonTest, UndoRedoCorrectness)
     processor.Redo();
     EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0xFF);
     EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+}
+
+// ============================================================================
+// RVV 1.0 Batch 2: Mask Logical and Prefix Instructions Tests
+// ============================================================================
+
+TEST(VectorArithmeticTest, MaskLogicalBasic)
+{
+    struct MaskLogicalCase
+    {
+        uint32_t funct6;
+        const char *name;
+        uint8_t expected_b0;
+    };
+
+    // vs2 byte 0 = 0b11001010 (0xCA)
+    // vs1 byte 0 = 0b10100110 (0xA6)
+    // vmand:  0xCA & 0xA6 = 0x82
+    // vmandn: 0xCA & ~0xA6 = 0xCA & 0x59 = 0x48
+    // vmor:   0xCA | 0xA6 = 0xEE
+    // vmorn:  0xCA | ~0xA6 = 0xCA | 0x59 = 0xDB
+    // vmxor:  0xCA ^ 0xA6 = 0x6C
+    const MaskLogicalCase cases[] = {
+        {0b011001, "vmand.mm", 0x82},
+        {0b011000, "vmandn.mm", 0x48},
+        {0b011010, "vmor.mm", 0xEE},
+        {0b011100, "vmorn.mm", 0xDB},
+        {0b011011, "vmxor.mm", 0x6C},
+    };
+
+    for (const auto &c : cases)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // SEW = 8, avl = 8 (VL = 8, VLMAX = 16)
+        LoadVectorProgram(processor, 8, 8, EncodeVectorVV(c.funct6, 3, 1, 2, 1, 0b010));
+
+        processor.registers_.WriteVregElement<uint8_t>(1, 0, 0xCA); // vs2
+        processor.registers_.WriteVregElement<uint8_t>(2, 0, 0xA6); // vs1
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x00);
+
+        processor.Step();
+
+        // Byte 0: active elements [0, 8)
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), c.expected_b0)
+            << "Mismatch for " << c.name;
+        // Byte 1: tail elements [8, 16) are set to 1 (mask destination tail agnostic)
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 1), 0xFF)
+            << "Tail mismatch for " << c.name;
+        // Bytes 2..15: beyond VLMAX must remain undisturbed (0x00)
+        for (unsigned int b = 2; b < 16; ++b)
+        {
+            EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, b), 0x00)
+                << "Byte " << b << " beyond VLMAX was modified for " << c.name;
+        }
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+}
+
+TEST(VectorArithmeticTest, MaskPrefixBasic)
+{
+    // First set bit at index 3 in vs2 (0b00101000 = 0x28)
+    // vmsbf.m (vs1 = 1): set before first -> bits 0..2 = 1, rest 0 -> 0x07
+    // vmsof.m (vs1 = 2): set only first   -> bit 3 = 1, rest 0    -> 0x08
+    // vmsif.m (vs1 = 3): set up to first  -> bits 0..3 = 1, rest 0 -> 0x0F
+    struct PrefixCase
+    {
+        uint32_t vs1;
+        const char *name;
+        uint8_t expected_b0;
+    };
+
+    const PrefixCase cases[] = {
+        {0b00001, "vmsbf.m", 0x07},
+        {0b00010, "vmsof.m", 0x08},
+        {0b00011, "vmsif.m", 0x0F},
+    };
+
+    for (const auto &c : cases)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // SEW = 8, avl = 8 (VL = 8, VLMAX = 16)
+        LoadVectorProgram(processor, 8, 8, EncodeVectorVV(0b010100, 3, 1, c.vs1, 1, 0b010));
+
+        processor.registers_.WriteVregElement<uint8_t>(1, 0, 0x28); // vs2
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x00);
+
+        processor.Step();
+
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), c.expected_b0)
+            << "Mismatch for " << c.name;
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 1), 0xFF)
+            << "Tail mismatch for " << c.name;
+        for (unsigned int b = 2; b < 16; ++b)
+        {
+            EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, b), 0x00)
+                << "Byte " << b << " beyond VLMAX was modified for " << c.name;
+        }
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+
+    // No set bit in vs2 (0x00):
+    // vmsbf.m -> all 1 (0xFF)
+    // vmsof.m -> all 0 (0x00)
+    // vmsif.m -> all 1 (0xFF)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+        LoadVectorProgram(processor, 8, 8, EncodeVectorVV(0b010100, 3, 1, 1, 1, 0b010)); // vmsbf.m
+        processor.registers_.WriteVregElement<uint8_t>(1, 0, 0x00);
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x00);
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0xFF);
+    }
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+        LoadVectorProgram(processor, 8, 8, EncodeVectorVV(0b010100, 3, 1, 2, 1, 0b010)); // vmsof.m
+        processor.registers_.WriteVregElement<uint8_t>(1, 0, 0x00);
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0xFF);
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x00);
+    }
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+        LoadVectorProgram(processor, 8, 8, EncodeVectorVV(0b010100, 3, 1, 3, 1, 0b010)); // vmsif.m
+        processor.registers_.WriteVregElement<uint8_t>(1, 0, 0x00);
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x00);
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0xFF);
+    }
+
+    // Masked prefix operation (vm = 0, v0.t)
+    // Mask v0 = 0x55 (even bits active, odd bits masked off)
+    // vs2 = 0x10 (bit 4 set) -> first active set bit is bit 4
+    // vma = false (undisturbed), initial vd = 0xAA (odd bits 1)
+    // Active even bits: bit 0 -> 1, bit 2 -> 1, bit 4 -> 0, bit 6 -> 0
+    // Inactive odd bits: retain initial vd odd bits (1) -> result byte 0 = 0xAF
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false), // tu, mu
+            EncodeVectorVV(0b010100, 3, 1, 1, 0, 0b010) // vmsbf.m v3, v1, v0.t (vm = 0)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        processor.registers_.WriteVregElement<uint8_t>(1, 0, 0x10); // vs2
+        SetMask(processor.registers_, 0x55); // v0
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0xAA);
+
+        processor.Step();
+
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0xAF);
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 1), 0xFF);
+    }
+
+    // Masked prefix with vma = true (mask agnostic) -> inactive bits written with 1
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, true), // tu, ma
+            EncodeVectorVV(0b010100, 3, 1, 1, 0, 0b010) // vmsbf.m v3, v1, v0.t (vm = 0)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        processor.registers_.WriteVregElement<uint8_t>(1, 0, 0x10); // vs2
+        SetMask(processor.registers_, 0x55); // v0
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x00);
+
+        processor.Step();
+
+        // Active even bits: bit 0 (1), bit 2 (1), bit 4 (0), bit 6 (0)
+        // Inactive odd bits: written with 1 -> 0xAF
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0xAF);
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 1), 0xFF);
+    }
+}
+
+TEST(VectorArithmeticTest, MaskedPrefixScanIgnoresInactiveSourceBits)
+{
+    // Regression test for masked prefix scan:
+    // An early source bit is 1 but its corresponding v0 bit is 0 (inactive).
+    // A later source bit is 1 and its corresponding v0 bit is 1 (active).
+    // Verify that the later bit is treated as the first active set bit, and the early
+    // inactive bit does NOT terminate the prefix scan.
+    //
+    // Setup (VL = 8):
+    // vs2 = (1 << 1) | (1 << 3) = 0x0A (bit 1 is set, bit 3 is set)
+    // v0  = ~static_cast<uint8_t>(1 << 1) = 0xFD (bit 1 is inactive; bits 0, 2..7 are active)
+    // Initial vd = 0x00, vma = false (undisturbed), vta = false.
+    //
+    // Analysis:
+    // i = 0: active, vs2[0]=0 -> vmsbf: 1, vmsof: 0, vmsif: 1
+    // i = 1: inactive (v0[1]=0) -> ignored for prefix scan! vd[1] undisturbed (0)
+    // i = 2: active, vs2[2]=0 -> vmsbf: 1, vmsof: 0, vmsif: 1
+    // i = 3: active, vs2[3]=1 -> FIRST ACTIVE SET BIT!
+    //        vmsbf: 0 (found_first = true)
+    //        vmsof: 1 (found_first = true)
+    //        vmsif: 1 (found_first = true)
+    // i = 4..7: active, found_first is true -> all 0
+    //
+    // Expected vd byte 0:
+    // vmsbf.m: bits 0, 2 set -> 0b00000101 = 0x05
+    // vmsof.m: bit 3 set     -> 0b00001000 = 0x08
+    // vmsif.m: bits 0, 2, 3 set -> 0b00001101 = 0x0D
+    struct ScanCase
+    {
+        uint32_t vs1;
+        const char *name;
+        uint8_t expected_b0;
+    };
+
+    const ScanCase cases[] = {
+        {0b00001, "vmsbf.m", 0x05},
+        {0b00010, "vmsof.m", 0x08},
+        {0b00011, "vmsif.m", 0x0D},
+    };
+
+    for (const auto &c : cases)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false), // tu, mu
+            EncodeVectorVV(0b010100, 3, 1, c.vs1, 0, 0b010) // vd=3, vs2=1, vs1, vm=0
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        processor.registers_.WriteVregElement<uint8_t>(1, 0, 0x0A); // vs2: bits 1 and 3 set
+        SetMask(processor.registers_, 0xFD); // v0: bit 1 is 0 (inactive), all others active
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x00);
+
+        processor.Step();
+
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), c.expected_b0)
+            << "Mismatch for " << c.name;
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 1), 0xFF)
+            << "Tail mismatch for " << c.name;
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+}
+
+TEST(VectorArithmeticTest, MaskLogicalVstartGTEVl)
+{
+    // When vstart >= vl, no destination bits are modified (neither body nor tail).
+    // Instruction completes normally and resets vstart to 0.
+    for (uint64_t vstart_val : {8ULL, 12ULL})
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, true, false),
+            EncodeVectorVV(0b011001, 3, 1, 2, 1, 0b010) // vmand.mm
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, vstart_val);
+
+        processor.registers_.WriteVregElement<uint8_t>(1, 0, 0xFF);
+        processor.registers_.WriteVregElement<uint8_t>(2, 0, 0xFF);
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, static_cast<uint8_t>(b + 0x10));
+
+        processor.Step();
+
+        // No bits modified
+        for (unsigned int b = 0; b < 16; ++b)
+        {
+            EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, b), static_cast<uint8_t>(b + 0x10))
+                << "Byte " << b << " modified when vstart=" << vstart_val << " >= vl=8";
+        }
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+}
+
+TEST(VectorArithmeticTest, MaskPrefixIllegalVstart)
+{
+    // Section 15.1: Nonzero vstart is illegal for prefix instructions, even when vl = 0.
+    for (uint64_t avl : {8ULL, 0ULL})
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false),
+            EncodeVectorVV(0b010100, 3, 1, 1, 1, 0b010) // vmsbf.m
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, avl);
+        processor.Step();
+
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 2);
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x55);
+
+        processor.Step();
+
+        // Destination must remain completely untouched
+        for (unsigned int b = 0; b < 16; ++b)
+        {
+            EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, b), 0x55);
+        }
+        // Illegal instruction returns early without clearing vstart
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 2u);
+    }
+}
+
+TEST(VectorArithmeticTest, MaskPrefixVlZero)
+{
+    // Section 15.1: If vstart == 0 and vl == 0, destination is completely unchanged (no tail writes applied).
+    // Resets vstart to 0.
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    Kites::AssembledProgram program;
+    program.text_buffer = {
+        EncodeVsetvli(8, true, false), // ta = true
+        EncodeVectorVV(0b010100, 3, 1, 1, 1, 0b010) // vmsbf.m
+    };
+    processor.LoadProgram(program);
+    processor.registers_.WriteGpr(1, 0); // avl = 0 -> vl = 0
+    processor.Step();
+    EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VL), 0u);
+
+    for (unsigned int b = 0; b < 16; ++b)
+        processor.registers_.WriteVregElement<uint8_t>(3, b, 0x44);
+
+    processor.Step();
+
+    for (unsigned int b = 0; b < 16; ++b)
+    {
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, b), 0x44)
+            << "Byte " << b << " was unexpectedly modified when vl=0";
+    }
+    EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+}
+
+TEST(VectorArithmeticTest, MaskLogicalRejectsVmZero)
+{
+    // Mask logical instructions encoded with vm=0 are reserved encodings and rejected.
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    Kites::AssembledProgram program;
+    program.text_buffer = {
+        EncodeVsetvli(8, false, false),
+        EncodeVectorVV(0b011001, 3, 1, 2, 0, 0b010) // vmand.mm with vm = 0 (reserved)
+    };
+    processor.LoadProgram(program);
+    processor.registers_.WriteGpr(1, 8);
+    processor.Step();
+
+    processor.registers_.WriteVregElement<uint8_t>(1, 0, 0xFF);
+    processor.registers_.WriteVregElement<uint8_t>(2, 0, 0xFF);
+
+    for (unsigned int b = 0; b < 16; ++b)
+        processor.registers_.WriteVregElement<uint8_t>(3, b, 0x77);
+
+    processor.Step();
+
+    for (unsigned int b = 0; b < 16; ++b)
+    {
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, b), 0x77);
+    }
+}
+
+TEST(VectorArithmeticTest, MaskPrefixIllegalOverlap)
+{
+    // vd == vs2 is illegal for prefix instructions
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false),
+            EncodeVectorVV(0b010100, 1, 1, 1, 1, 0b010) // vmsbf.m v1, v1
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(1, b, 0x33);
+
+        processor.Step();
+
+        for (unsigned int b = 0; b < 16; ++b)
+            EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(1, b), 0x33);
+    }
+
+    // Masked prefix (vm = 0) with vd == v0 is illegal
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false),
+            EncodeVectorVV(0b010100, 0, 1, 1, 0, 0b010) // vmsbf.m v0, v1, v0.t
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(0, b, 0x55);
+
+        processor.Step();
+
+        for (unsigned int b = 0; b < 16; ++b)
+            EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(0, b), 0x55);
+    }
+}
+
+TEST(VectorArithmeticTest, MaskMultiByteBoundaries)
+{
+    // VLEN = 128, LMUL = m1, SEW = 8 -> VLMAX = 16.
+    // Test boundary lengths across multi-byte packed masks: VL in {1, 7, 8, 9, 15, 16}.
+    for (unsigned int vl_target : {1u, 7u, 8u, 9u, 15u, 16u})
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, true, false), // SEW=8, ta=true
+            EncodeVectorVV(0b011001, 3, 1, 2, 1, 0b010) // vmand.mm v3, v1, v2
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, vl_target);
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VL), vl_target);
+
+        // vs2 has all 1s across bytes 0 and 1
+        processor.registers_.WriteVregElement<uint8_t>(1, 0, 0xFF);
+        processor.registers_.WriteVregElement<uint8_t>(1, 1, 0xFF);
+
+        // vs1 has alternating pattern: byte 0 = 0xAA, byte 1 = 0x55
+        processor.registers_.WriteVregElement<uint8_t>(2, 0, 0xAA);
+        processor.registers_.WriteVregElement<uint8_t>(2, 1, 0x55);
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x00);
+
+        processor.Step();
+
+        // Verify active bits [0, vl_target)
+        for (unsigned int i = 0; i < vl_target; ++i)
+        {
+            const unsigned int byte_idx = i / 8;
+            const unsigned int bit_idx = i % 8;
+            const uint8_t vs1_byte = (byte_idx == 0) ? 0xAA : 0x55;
+            const bool expected_bit = ((vs1_byte >> bit_idx) & 1) != 0;
+            const bool actual_bit = ((processor.registers_.ReadVregElement<uint8_t>(3, byte_idx) >> bit_idx) & 1) != 0;
+            EXPECT_EQ(actual_bit, expected_bit)
+                << "Active bit mismatch at index " << i << " for VL=" << vl_target;
+        }
+
+        // Verify tail bits [vl_target, 16) are set to 1 (tail agnostic)
+        for (unsigned int i = vl_target; i < 16; ++i)
+        {
+            const unsigned int byte_idx = i / 8;
+            const unsigned int bit_idx = i % 8;
+            const bool actual_bit = ((processor.registers_.ReadVregElement<uint8_t>(3, byte_idx) >> bit_idx) & 1) != 0;
+            EXPECT_TRUE(actual_bit)
+                << "Tail bit at index " << i << " was not set to 1 for VL=" << vl_target;
+        }
+
+        // Verify bytes beyond VLMAX (bytes 2..15) remain undisturbed 0x00
+        for (unsigned int b = 2; b < 16; ++b)
+        {
+            EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, b), 0x00)
+                << "Byte " << b << " beyond VLMAX was modified for VL=" << vl_target;
+        }
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+
+    // Prefix instruction cross-byte test with set bit at index 8 (byte 1, bit 0)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, true, false),
+            EncodeVectorVV(0b010100, 3, 1, 1, 1, 0b010) // vmsbf.m v3, v1
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 9); // VL = 9
+        processor.Step();
+
+        // vs2: bit 8 is set (byte 1, bit 0)
+        processor.registers_.WriteVregElement<uint8_t>(1, 0, 0x00);
+        processor.registers_.WriteVregElement<uint8_t>(1, 1, 0x01);
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x00);
+
+        processor.Step();
+
+        // Byte 0: bits 0..7 are all before first set bit -> 0xFF
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0xFF);
+        // Byte 1: bit 8 is first set bit -> 0; tail bits 9..15 -> 1s => 0b11111110 = 0xFE
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 1), 0xFE);
+        for (unsigned int b = 2; b < 16; ++b)
+            EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, b), 0x00);
+    }
+}
+
+TEST(VectorArithmeticTest, MaskLogicalSEWIndependence)
+{
+    // Mask logical instructions operate bitwise on mask registers regardless of SEW.
+    struct SEWCase
+    {
+        unsigned int sew_bits;
+        unsigned int vlmax;
+    };
+
+    const SEWCase cases[] = {
+        {8, 16},
+        {16, 8},
+        {32, 4},
+        {64, 2},
+    };
+
+    for (const auto &c : cases)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(c.sew_bits, false, false),
+            EncodeVectorVV(0b011011, 3, 1, 2, 1, 0b010) // vmxor.mm v3, v1, v2
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, c.vlmax); // VL = VLMAX
+        processor.Step();
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VL), c.vlmax);
+
+        // vs2 = 0xCA, vs1 = 0xA6 -> XOR = 0x6C
+        processor.registers_.WriteVregElement<uint8_t>(1, 0, 0xCA);
+        processor.registers_.WriteVregElement<uint8_t>(2, 0, 0xA6);
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x00);
+
+        processor.Step();
+
+        // Active mask elements [0, vlmax) should match bits from 0x6C
+        const uint8_t mask_bits = static_cast<uint8_t>((1u << c.vlmax) - 1u);
+        const uint8_t expected_b0 = 0x6C & mask_bits;
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0) & mask_bits, expected_b0)
+            << "Mismatch at SEW=" << c.sew_bits;
+
+        // Bits beyond VLMAX must remain undisturbed 0x00
+        for (unsigned int b = 1; b < 16; ++b)
+        {
+            if (c.vlmax <= 8 && b >= 1)
+                EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, b), 0x00);
+        }
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+}
+
+TEST(VectorArithmeticTest, MaskPrefixMaskingPoliciesComprehensive)
+{
+    // Test all prefix instructions under vma=false (undisturbed) and vma=true (agnostic)
+    // with contiguous, alternating, empty, and full masks.
+    Kites::setupVmStateDirectory();
+
+    // 1. All elements inactive: v0 = 0x00, vs2 = 0x02 (bit 1 set)
+    // vmsbf.m under vma=false: destination retains initial vd
+    {
+        Processor processor;
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false), // vma = false (undisturbed)
+            EncodeVectorVV(0b010100, 3, 1, 1, 0, 0b010) // vmsbf.m v3, v1, v0.t
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        processor.registers_.WriteVregElement<uint8_t>(1, 0, 0x02);
+        SetMask(processor.registers_, 0x00); // all inactive
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x37);
+
+        processor.Step();
+
+        // Active elements 0..7 were inactive, so retain 0x37
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x37);
+        // Tail elements 8..15 set to 1 -> 0xFF
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 1), 0xFF);
+    }
+
+    // 2. All elements inactive under vma=true (agnostic): active elements written with 1
+    {
+        Processor processor;
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, true), // vma = true (agnostic)
+            EncodeVectorVV(0b010100, 3, 1, 1, 0, 0b010) // vmsbf.m v3, v1, v0.t
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        processor.registers_.WriteVregElement<uint8_t>(1, 0, 0x02);
+        SetMask(processor.registers_, 0x00); // all inactive
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x00);
+
+        processor.Step();
+
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0xFF);
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 1), 0xFF);
+    }
+
+    // 3. Full mask: v0 = 0xFF -> identical to unmasked
+    {
+        Processor processor;
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false),
+            EncodeVectorVV(0b010100, 3, 1, 3, 0, 0b010) // vmsif.m v3, v1, v0.t
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        processor.registers_.WriteVregElement<uint8_t>(1, 0, 0x04); // bit 2 set
+        SetMask(processor.registers_, 0xFF); // all active
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x00);
+
+        processor.Step();
+
+        // vmsif.m with first set bit at bit 2 -> bits 0, 1, 2 set -> 0x07
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x07);
+    }
+}
+
+TEST(VectorArithmeticTest, MaskLogicalVstartBoundariesComprehensive)
+{
+    // Test 0 < vstart < vl: vstart = 3, vl = 8
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false),
+            EncodeVectorVV(0b011001, 3, 1, 2, 1, 0b010) // vmand.mm v3, v1, v2
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 3);
+
+        processor.registers_.WriteVregElement<uint8_t>(1, 0, 0xFF);
+        processor.registers_.WriteVregElement<uint8_t>(2, 0, 0xFF);
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x00);
+        // Set initial vd byte 0: bits 0..2 are 0b010 = 0x02
+        processor.registers_.WriteVregElement<uint8_t>(3, 0, 0x02);
+
+        processor.Step();
+
+        // Bits 0..2 undisturbed: 0x02
+        // Bits 3..7 computed: 1s -> 0b11111000 = 0xF8
+        // Combined byte 0 = 0xFA
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0xFA);
+        // Tail bits [8, 16) are set to 1
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 1), 0xFF);
+        // Bytes beyond VLMAX undisturbed
+        for (unsigned int b = 2; b < 16; ++b)
+            EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, b), 0x00);
+
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+
+    // Test vstart == vl: destination completely unchanged
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, true, false),
+            EncodeVectorVV(0b011001, 3, 1, 2, 1, 0b010)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 8);
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, static_cast<uint8_t>(b + 0x30));
+
+        processor.Step();
+
+        for (unsigned int b = 0; b < 16; ++b)
+            EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, b), static_cast<uint8_t>(b + 0x30));
+
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+
+    // Test vstart > vl: destination completely unchanged
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, true, false),
+            EncodeVectorVV(0b011001, 3, 1, 2, 1, 0b010)
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 12);
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, static_cast<uint8_t>(b + 0x50));
+
+        processor.Step();
+
+        for (unsigned int b = 0; b < 16; ++b)
+            EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, b), static_cast<uint8_t>(b + 0x50));
+
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+}
+
+TEST(VectorArithmeticTest, MaskLogicalRegisterAliasing)
+{
+    // Test vd == vs1
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false),
+            EncodeVectorVV(0b011001, 1, 2, 1, 1, 0b010) // vmand.mm v1, v2, v1
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        processor.registers_.WriteVregElement<uint8_t>(1, 0, 0x0F); // vs1 and vd
+        processor.registers_.WriteVregElement<uint8_t>(2, 0, 0x33); // vs2
+
+        processor.Step();
+
+        // 0x33 & 0x0F = 0x03
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(1, 0), 0x03);
+    }
+
+    // Test vd == vs2
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false),
+            EncodeVectorVV(0b011010, 2, 2, 1, 1, 0b010) // vmor.mm v2, v2, v1
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        processor.registers_.WriteVregElement<uint8_t>(1, 0, 0x0F); // vs1
+        processor.registers_.WriteVregElement<uint8_t>(2, 0, 0x30); // vs2 and vd
+
+        processor.Step();
+
+        // 0x30 | 0x0F = 0x3F
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(2, 0), 0x3F);
+    }
+
+    // Test vd == v0 (legal for mask logical with vm = 1)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false),
+            EncodeVectorVV(0b011011, 0, 1, 2, 1, 0b010) // vmxor.mm v0, v1, v2
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+        processor.Step();
+
+        processor.registers_.WriteVregElement<uint8_t>(1, 0, 0xAA);
+        processor.registers_.WriteVregElement<uint8_t>(2, 0, 0x55);
+
+        processor.Step();
+
+        // 0xAA ^ 0x55 = 0xFF
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(0, 0), 0xFF);
+    }
+}
+
+TEST(VectorArithmeticTest, MaskLogicalAndPrefixUndoRedo)
+{
+    // Step, Undo, and Redo for mask logical
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false),
+            EncodeVectorVV(0b011001, 3, 1, 2, 1, 0b010) // vmand.mm v3, v1, v2
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x22);
+
+        processor.registers_.WriteVregElement<uint8_t>(1, 0, 0xFF);
+        processor.registers_.WriteVregElement<uint8_t>(2, 0, 0x55);
+
+        processor.Step(); // vsetvli
+        processor.Step(); // vmand.mm
+
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x55);
+
+        // Undo -> restores initial 0x22
+        processor.Undo();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x22);
+
+        // Redo -> re-applies 0x55
+        processor.Redo();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x55);
+    }
+
+    // Step, Undo, and Redo for mask prefix
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        Kites::AssembledProgram program;
+        program.text_buffer = {
+            EncodeVsetvli(8, false, false),
+            EncodeVectorVV(0b010100, 3, 1, 1, 1, 0b010) // vmsbf.m v3, v1
+        };
+        processor.LoadProgram(program);
+        processor.registers_.WriteGpr(1, 8);
+
+        for (unsigned int b = 0; b < 16; ++b)
+            processor.registers_.WriteVregElement<uint8_t>(3, b, 0x88);
+
+        processor.registers_.WriteVregElement<uint8_t>(1, 0, 0x08); // bit 3 set
+
+        processor.Step(); // vsetvli
+        processor.Step(); // vmsbf.m
+
+        // Bits 0..2 set -> 0x07
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x07);
+
+        // Undo -> restores initial 0x88
+        processor.Undo();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x88);
+
+        // Redo -> re-applies 0x07
+        processor.Redo();
+        EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x07);
+    }
 }

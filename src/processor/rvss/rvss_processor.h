@@ -99,6 +99,8 @@ class RVSSProcessor : public ProcessorBase
     void ExecuteCsr();
     void ExecuteVsetvli();
     void ExecuteVectorArithmetic();
+    void ExecuteVectorMaskLogical();
+    void ExecuteVectorMaskPrefix();
     void HandleSyscall();
 
     void WriteMemory();

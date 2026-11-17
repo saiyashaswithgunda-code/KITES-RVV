@@ -2,9 +2,9 @@
 
 ## 1. Status summary
 
-**Latest known verification:** 387/387 tests passed (100% CTest pass rate).
+**Latest known verification:** 405/405 tests passed (100% CTest pass rate).
 
-The statuses below describe the implementation after Batch 1 vector comparisons and Batch 5 integer division and remainder. A
+The statuses below describe the implementation after Batch 1 vector comparisons (realigned to RVV 1.0 OPIVV/OPIVX/OPIVI encodings), Batch 2 mask logical and prefix operations, and Batch 5 integer division and remainder. A
 new contributor should run the full suite before making changes to
 confirm the current checkout still matches this baseline.
 
@@ -74,11 +74,15 @@ confirm the current checkout still matches this baseline.
   families                                        fixed-point arithmetic
 
   Vector comparisons      Complete                All 20 legal forms (.vv, .vx, .vi),
+                                                  standard RVV 1.0 encodings,
                                                   packed mask vd, tail agnostic to
                                                   VLMAX, SEW 8/16/32/64
 
-  Vector mask logical     Pending                 See Section 4
-  instructions                                    
+  Vector mask logical     Complete                5 instructions (vmand, vmandn,
+  instructions                                    vmor, vmorn, vmxor.mm)
+
+  Vector mask prefix      Complete                3 instructions (vmsbf, vmsof,
+  instructions                                    vmsif.m), unmasked & masked
 
   Strided/indexed memory  Pending / optional      Not part of current
                                                   memory subset
@@ -216,7 +220,7 @@ Current implementation supports:
 - All 20 legal instruction/operand-form combinations (no unsupported forms like `.vi` for `vmslt`/`vmsltu` or `.vv` for `vmsgt`/`vmsgtu`).
 - Comparison result writes boolean predicate bits packed bit-by-bit into mask destination register `vd` (bit $i$ corresponds to element $i$).
 - Supported SEW = 8, 16, 32, 64; LMUL = m1; VLEN = 128.
-- Encodings: OPMVV (`funct3 = 010`), OPMVX (`funct3 = 110`), OPIVI (`funct3 = 011`).
+- Encodings: Standard RVV 1.0 realigned: OPIVV (`funct3 = 000`) for `.vv`, OPIVX (`funct3 = 100`) for `.vx`, OPIVI (`funct3 = 011`) for `.vi`.
 - Scalar operands in `.vx` variants are masked/truncated to active SEW and interpreted with instruction-specific signedness.
 - Immediate operands in `.vi` variants parse 5-bit signed immediate `simm5` in `[-16, 15]`, sign-extended to SEW bits.
 - Deterministic mask tail policy: mask destination is always tail-agnostic (tail bits in $[vl, VLMAX)$ are set to 1 regardless of `vta`); bits beyond $VLMAX$ remain strictly undisturbed.
@@ -224,6 +228,42 @@ Current implementation supports:
 - Hazard-free register overlap: source registers (`vs1`, `vs2`, `rs1`) and execution mask (`v0`) are snapshotted prior to destination updates, ensuring safe execution even when $vd = v0$, $vd = vs1$, or $vd = vs2$.
 - Boundary semantics: $vstart \ge vl$ produces no body or tail modifications, leaves the destination register completely untouched, and resets `vstart` to 0 on writeback.
 - Full delta tracking and undo/redo support.
+
+### Vector mask logical operations
+
+-   `vmand.mm` (bitwise AND)
+-   `vmandn.mm` (bitwise AND with inverted source 2: `vs2 & ~vs1`)
+-   `vmor.mm` (bitwise OR)
+-   `vmorn.mm` (bitwise OR with inverted source 2: `vs2 | ~vs1`)
+-   `vmxor.mm` (bitwise XOR)
+
+Current implementation supports:
+- All 5 mask logical instructions encoded with `funct3 = 010` (`OPMVV`) and `vm = 1`.
+- `vm = 0` is reserved and rejected.
+- Packed single-bit mask element operations independent of the configured SEW.
+- Deterministic tail-agnostic policy: tail bits in $[vl, VLMAX)$ are set to 1; bits beyond $VLMAX$ remain undisturbed.
+- Strict $vstart \ge vl$ handling: produces no body or tail modifications, leaves destination untouched, and resets `vstart` to 0 on writeback.
+- Prestart bits in $[0, vstart)$ remain undisturbed when $0 < vstart < vl$.
+- Full support for register aliasing ($vd = vs1$, $vd = vs2$, $vd = vs1 = vs2$, $vd = v0$) and delta undo/redo.
+
+### Vector mask prefix operations
+
+-   `vmsbf.m` (set bits before first active set bit)
+-   `vmsof.m` (set only the first active set bit)
+-   `vmsif.m` (set bits up to and including the first active set bit)
+
+Current implementation supports:
+- Shared encoding `funct6 = 010100`, `funct3 = 010` (`OPMVV`), distinguished by `vs1`: `vmsbf.m` (`vs1 = 1`), `vmsof.m` (`vs1 = 2`), `vmsif.m` (`vs1 = 3`).
+- Both unmasked (`vmsbf.m vd, vs2`, `vm = 1`) and masked (`vmsbf.m vd, vs2, v0.t`, `vm = 0`) assembler syntax and machine-code generation.
+- Correct masked prefix scan: inactive elements (`v0[i] == 0`) do not participate in or terminate the prefix scan; only active elements are evaluated to find the first set bit.
+- Inactive elements follow the `vma` policy (retaining undisturbed bits when `vma=0`, setting bits to 1 when `vma=1`).
+- Deterministic tail-agnostic policy applied when $vl > 0$: tail bits in $[vl, VLMAX)$ set to 1.
+- Edge case $vstart == 0$ and $vl == 0$: destination completely untouched (no tail writes applied) and `vstart` reset to 0.
+- Exception and hazard validations:
+  - Nonzero `vstart` is illegal even when $vl = 0$ (early return without clearing `vstart`).
+  - Destination/source overlap $vd == vs2$ is illegal.
+  - Masked destination/mask overlap $vd == v0$ when `vm = 0` is illegal.
+- Full delta undo/redo support.
 
 ### Vector reduction
 
@@ -288,19 +328,20 @@ tail-agnostic implementation choice), while bits beyond $VLMAX$ remain undisturb
 verified across SEW 8, 16, 32, 64, register overlaps ($vd=v0, vd=vs1, vd=vs2$), $vstart \ge vl$,
 and undo/redo.
 
-### Priority B --- Vector mask logical operations
+### Priority B --- Vector mask logical and prefix operations (Implemented)
 
-Potential family:
-- `vmand.mm`
-- `vmor.mm`
-- `vmxor.mm`
-- `vmnot.m`
-- `vmnand.mm`
-- `vmnor.mm`
-- `vmxnor.mm`
+Implemented additions:
+- Mask logical: `vmand.mm`, `vmandn.mm`, `vmor.mm`, `vmorn.mm`, `vmxor.mm`
+- Mask prefix: `vmsbf.m`, `vmsof.m`, `vmsif.m`
 
-These operate on packed mask bits and require dedicated handling; do not route
-them through ordinary SEW arithmetic without checking the specification.
+These operate on packed single-bit mask elements independent of configured SEW. Tail bits in
+$[vl, VLMAX)$ are set to 1 (deterministic tail-agnostic implementation choice), while bits beyond
+$VLMAX$ remain strictly undisturbed. Prefix instructions support both unmasked and masked forms (`v0.t`),
+correctly bypassing inactive elements during prefix scans. Nonzero `vstart` and illegal overlaps
+($vd == vs2$, masked $vd == v0$) are rejected. When $vl=0$, destination is completely unchanged.
+
+Deferred candidate mask logical extensions:
+- `vmnand.mm`, `vmnor.mm`, `vmxnor.mm`, `vmnot.m`
 
 ### Priority C --- Vector shift operations (Implemented)
 

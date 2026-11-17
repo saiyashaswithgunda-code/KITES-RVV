@@ -42,7 +42,18 @@ static bool isVectorVVInstruction(const std::string &opcode)
            opcode == "vmsltu.vv" ||
            opcode == "vmslt.vv" ||
            opcode == "vmsleu.vv" ||
-           opcode == "vmsle.vv";
+           opcode == "vmsle.vv" ||
+           opcode == "vmandn.mm" ||
+           opcode == "vmand.mm" ||
+           opcode == "vmor.mm" ||
+           opcode == "vmxor.mm" ||
+           opcode == "vmorn.mm";
+}
+static bool isVectorPrefixInstruction(const std::string &opcode)
+{
+    return opcode == "vmsbf.m" ||
+           opcode == "vmsof.m" ||
+           opcode == "vmsif.m";
 }
 bool isVectorMemoryInstruction(const std::string &opcode)
 {
@@ -237,6 +248,16 @@ uint32_t generateVectorVVTypeMachineCode(const ICUnit &block)
         funct6 = 0b011100;
     else if (opcode == "vmsle.vv")
         funct6 = 0b011101;
+    else if (opcode == "vmandn.mm")
+        funct6 = 0b011000;
+    else if (opcode == "vmand.mm")
+        funct6 = 0b011001;
+    else if (opcode == "vmor.mm")
+        funct6 = 0b011010;
+    else if (opcode == "vmxor.mm")
+        funct6 = 0b011011;
+    else if (opcode == "vmorn.mm")
+        funct6 = 0b011100;
     else
         throw std::runtime_error("Unsupported vector instruction: " + opcode);
 
@@ -250,9 +271,9 @@ uint32_t generateVectorVVTypeMachineCode(const ICUnit &block)
          opcode == "vmulhu.vv" || opcode == "vmulhsu.vv" ||
          opcode == "vdiv.vv" || opcode == "vdivu.vv" ||
          opcode == "vrem.vv" || opcode == "vremu.vv" ||
-         opcode == "vmseq.vv" || opcode == "vmsne.vv" ||
-         opcode == "vmsltu.vv" || opcode == "vmslt.vv" ||
-         opcode == "vmsleu.vv" || opcode == "vmsle.vv");
+         opcode == "vmandn.mm" || opcode == "vmand.mm" ||
+         opcode == "vmor.mm" || opcode == "vmxor.mm" ||
+         opcode == "vmorn.mm");
     const uint32_t funct3 = is_opmvv ? 0b010 : 0b000;
     constexpr uint32_t opcodeBits = 0b1010111;
 
@@ -398,11 +419,7 @@ uint32_t generateVectorVXTypeMachineCode(const ICUnit &block)
         (opcode == "vmul.vx" || opcode == "vmulh.vx" ||
          opcode == "vmulhu.vx" || opcode == "vmulhsu.vx" ||
          opcode == "vdiv.vx" || opcode == "vdivu.vx" ||
-         opcode == "vrem.vx" || opcode == "vremu.vx" ||
-         opcode == "vmseq.vx" || opcode == "vmsne.vx" ||
-         opcode == "vmsltu.vx" || opcode == "vmslt.vx" ||
-         opcode == "vmsleu.vx" || opcode == "vmsle.vx" ||
-         opcode == "vmsgtu.vx" || opcode == "vmsgt.vx");
+         opcode == "vrem.vx" || opcode == "vremu.vx");
     const uint32_t funct3 = is_opmvx ? 0b110 : 0b100;
     constexpr uint32_t opcodeBits = 0b1010111;
 
@@ -464,6 +481,39 @@ uint32_t generateVectorVITypeMachineCode(const ICUnit &block)
     machineCode |= (vm << 25);
     machineCode |= (vs2 << 20);
     machineCode |= (simm5 << 15);
+    machineCode |= (funct3 << 12);
+    machineCode |= (vd << 7);
+    machineCode |= opcodeBits;
+
+    return machineCode;
+}
+
+static uint32_t generateVectorPrefixMachineCode(const ICUnit &block)
+{
+    const std::string opcode = block.getOpcode();
+    constexpr uint32_t funct6 = 0b010100;
+    constexpr uint32_t funct3 = 0b010;
+    constexpr uint32_t opcodeBits = 0b1010111;
+
+    uint32_t vs1 = 0;
+    if (opcode == "vmsbf.m")
+        vs1 = 0b00001;
+    else if (opcode == "vmsof.m")
+        vs1 = 0b00010;
+    else if (opcode == "vmsif.m")
+        vs1 = 0b00011;
+    else
+        throw std::runtime_error("Unsupported vector prefix instruction: " + opcode);
+
+    const uint32_t vd  = extractRegisterIndex(block.getRd());
+    const uint32_t vs2 = extractRegisterIndex(block.getRs2());
+    const uint32_t vm  = (block.getRs3() == "v0.t") ? 0 : 1;
+
+    uint32_t machineCode = 0;
+    machineCode |= (funct6 << 26);
+    machineCode |= (vm << 25);
+    machineCode |= (vs2 << 20);
+    machineCode |= (vs1 << 15);
     machineCode |= (funct3 << 12);
     machineCode |= (vd << 7);
     machineCode |= opcodeBits;
@@ -789,6 +839,10 @@ generateMachineCode(const std::vector<std::pair<ICUnit, bool>> &IntermediateCode
         else if (isVectorVIInstruction(block.getOpcode()))
         {
             code = generateVectorVITypeMachineCode(block);
+        }
+        else if (isVectorPrefixInstruction(block.getOpcode()))
+        {
+            code = generateVectorPrefixMachineCode(block);
         }
         else if (instruction_set::isValidRTypeInstruction(block.getOpcode()))
         {

@@ -782,52 +782,104 @@ TEST(VectorAssemblerTest, RejectsNonExistentDivisionImmediate)
 
 TEST(VectorAssemblerTest, EncodesAllVectorComparisonVVCorrectly)
 {
-    // funct3 = 010 (OPMVV)
+    // funct3 = 000 (OPIVV)
     // vmseq.vv  -> funct6 = 011000 (0x18)
-    EXPECT_EQ(assembleVectorVV("vmseq.vv v1, v2, v3\n"), 0x6221A0D7u);
+    EXPECT_EQ(assembleVectorVV("vmseq.vv v1, v2, v3\n"), 0x622180D7u);
 
     // vmsne.vv  -> funct6 = 011001 (0x19)
-    EXPECT_EQ(assembleVectorVV("vmsne.vv v1, v2, v3\n"), 0x6621A0D7u);
+    EXPECT_EQ(assembleVectorVV("vmsne.vv v1, v2, v3\n"), 0x662180D7u);
 
     // vmsltu.vv -> funct6 = 011010 (0x1A)
-    EXPECT_EQ(assembleVectorVV("vmsltu.vv v1, v2, v3\n"), 0x6A21A0D7u);
+    EXPECT_EQ(assembleVectorVV("vmsltu.vv v1, v2, v3\n"), 0x6A2180D7u);
 
     // vmslt.vv  -> funct6 = 011011 (0x1B)
-    EXPECT_EQ(assembleVectorVV("vmslt.vv v1, v2, v3\n"), 0x6E21A0D7u);
+    EXPECT_EQ(assembleVectorVV("vmslt.vv v1, v2, v3\n"), 0x6E2180D7u);
 
     // vmsleu.vv -> funct6 = 011100 (0x1C)
-    EXPECT_EQ(assembleVectorVV("vmsleu.vv v1, v2, v3\n"), 0x7221A0D7u);
+    EXPECT_EQ(assembleVectorVV("vmsleu.vv v1, v2, v3\n"), 0x722180D7u);
 
     // vmsle.vv  -> funct6 = 011101 (0x1D)
-    EXPECT_EQ(assembleVectorVV("vmsle.vv v1, v2, v3\n"), 0x7621A0D7u);
+    EXPECT_EQ(assembleVectorVV("vmsle.vv v1, v2, v3\n"), 0x762180D7u);
 }
 
 TEST(VectorAssemblerTest, EncodesAllVectorComparisonVXCorrectly)
 {
-    // funct3 = 110 (OPMVX)
+    // funct3 = 100 (OPIVX)
     // vmseq.vx  -> funct6 = 011000 (0x18)
-    EXPECT_EQ(assembleVectorVX("vmseq.vx v1, v2, x3\n"), 0x6221E0D7u);
+    EXPECT_EQ(assembleVectorVX("vmseq.vx v1, v2, x3\n"), 0x6221C0D7u);
 
     // vmsne.vx  -> funct6 = 011001 (0x19)
-    EXPECT_EQ(assembleVectorVX("vmsne.vx v1, v2, x3\n"), 0x6621E0D7u);
+    EXPECT_EQ(assembleVectorVX("vmsne.vx v1, v2, x3\n"), 0x6621C0D7u);
 
     // vmsltu.vx -> funct6 = 011010 (0x1A)
-    EXPECT_EQ(assembleVectorVX("vmsltu.vx v1, v2, x3\n"), 0x6A21E0D7u);
+    EXPECT_EQ(assembleVectorVX("vmsltu.vx v1, v2, x3\n"), 0x6A21C0D7u);
 
     // vmslt.vx  -> funct6 = 011011 (0x1B)
-    EXPECT_EQ(assembleVectorVX("vmslt.vx v1, v2, x3\n"), 0x6E21E0D7u);
+    EXPECT_EQ(assembleVectorVX("vmslt.vx v1, v2, x3\n"), 0x6E21C0D7u);
 
     // vmsleu.vx -> funct6 = 011100 (0x1C)
-    EXPECT_EQ(assembleVectorVX("vmsleu.vx v1, v2, x3\n"), 0x7221E0D7u);
+    EXPECT_EQ(assembleVectorVX("vmsleu.vx v1, v2, x3\n"), 0x7221C0D7u);
 
     // vmsle.vx  -> funct6 = 011101 (0x1D)
-    EXPECT_EQ(assembleVectorVX("vmsle.vx v1, v2, x3\n"), 0x7621E0D7u);
+    EXPECT_EQ(assembleVectorVX("vmsle.vx v1, v2, x3\n"), 0x7621C0D7u);
 
     // vmsgtu.vx -> funct6 = 011110 (0x1E)
-    EXPECT_EQ(assembleVectorVX("vmsgtu.vx v1, v2, x3\n"), 0x7A21E0D7u);
+    EXPECT_EQ(assembleVectorVX("vmsgtu.vx v1, v2, x3\n"), 0x7A21C0D7u);
 
     // vmsgt.vx  -> funct6 = 011111 (0x1F)
-    EXPECT_EQ(assembleVectorVX("vmsgt.vx v1, v2, x3\n"), 0x7E21E0D7u);
+    EXPECT_EQ(assembleVectorVX("vmsgt.vx v1, v2, x3\n"), 0x7E21C0D7u);
+}
+
+TEST(VectorAssemblerTest, EncodesAllVectorMaskLogicalCorrectly)
+{
+    // funct3 = 010 (OPMVV), vm = 1
+    // vmandn.mm -> funct6 = 011000 (0x18)
+    EXPECT_EQ(assembleVectorVV("vmandn.mm v1, v2, v3\n"), 0x6221A0D7u);
+
+    // vmand.mm  -> funct6 = 011001 (0x19)
+    EXPECT_EQ(assembleVectorVV("vmand.mm v1, v2, v3\n"), 0x6621A0D7u);
+
+    // vmor.mm   -> funct6 = 011010 (0x1A)
+    EXPECT_EQ(assembleVectorVV("vmor.mm v1, v2, v3\n"), 0x6A21A0D7u);
+
+    // vmxor.mm  -> funct6 = 011011 (0x1B)
+    EXPECT_EQ(assembleVectorVV("vmxor.mm v1, v2, v3\n"), 0x6E21A0D7u);
+
+    // vmorn.mm  -> funct6 = 011100 (0x1C)
+    EXPECT_EQ(assembleVectorVV("vmorn.mm v1, v2, v3\n"), 0x7221A0D7u);
+}
+
+TEST(VectorAssemblerTest, EncodesAllVectorMaskPrefixCorrectly)
+{
+    // funct6 = 010100 (0x14), funct3 = 010 (OPMVV)
+    // Unmasked (vm = 1):
+    // vmsbf.m -> vs1 = 00001 (1)
+    EXPECT_EQ(assembleVectorVV("vmsbf.m v1, v2\n"), 0x5220A0D7u);
+
+    // vmsof.m -> vs1 = 00010 (2)
+    EXPECT_EQ(assembleVectorVV("vmsof.m v1, v2\n"), 0x522120D7u);
+
+    // vmsif.m -> vs1 = 00011 (3)
+    EXPECT_EQ(assembleVectorVV("vmsif.m v1, v2\n"), 0x5221A0D7u);
+
+    // Masked with v0.t (vm = 0):
+    EXPECT_EQ(assembleVectorVV("vmsbf.m v1, v2, v0.t\n"), 0x5020A0D7u);
+    EXPECT_EQ(assembleVectorVV("vmsof.m v1, v2, v0.t\n"), 0x502120D7u);
+    EXPECT_EQ(assembleVectorVV("vmsif.m v1, v2, v0.t\n"), 0x5021A0D7u);
+}
+
+TEST(VectorAssemblerTest, DistinctMachineCodesBetweenComparisonAndMaskLogical)
+{
+    // Verify that comparisons (OPIVV, funct3=000) and mask-logical (OPMVV, funct3=010)
+    // sharing the same funct6 produce distinct 32-bit machine codes.
+    const uint32_t vmseq_code = assembleVectorVV("vmseq.vv v1, v2, v3\n");
+    const uint32_t vmandn_code = assembleVectorVV("vmandn.mm v1, v2, v3\n");
+    EXPECT_NE(vmseq_code, vmandn_code);
+    EXPECT_EQ(vmseq_code, 0x622180D7u);
+    EXPECT_EQ(vmandn_code, 0x6221A0D7u);
+    // Bit 13 distinguishes funct3 = 0b000 from 0b010
+    EXPECT_EQ((vmseq_code >> 12) & 0b111, 0b000u);
+    EXPECT_EQ((vmandn_code >> 12) & 0b111, 0b010u);
 }
 
 TEST(VectorAssemblerTest, EncodesAllVectorComparisonVICorrectly)
@@ -876,4 +928,36 @@ TEST(VectorAssemblerTest, RejectsUnsupportedComparisonForms)
 
     std::istringstream stream_vmsgtu_vv("vmsgtu.vv v1, v2, v3\n");
     EXPECT_THROW(Kites::assemble(stream_vmsgtu_vv), std::runtime_error);
+}
+
+TEST(VectorAssemblerTest, RejectsUnsupportedMaskLogicalAndPrefixForms)
+{
+    Kites::setupVmStateDirectory();
+
+    // Mask logical instructions only support .mm form (no .vx, .vi, or scalar)
+    std::istringstream stream_vmand_vx("vmand.vx v1, v2, x3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmand_vx), std::runtime_error);
+
+    std::istringstream stream_vmand_vi("vmand.vi v1, v2, 3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmand_vi), std::runtime_error);
+
+    std::istringstream stream_vmandn_vx("vmandn.vx v1, v2, x3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmandn_vx), std::runtime_error);
+
+    std::istringstream stream_vmor_vi("vmor.vi v1, v2, 3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmor_vi), std::runtime_error);
+
+    // Prefix instructions only support .m form (no .vv, .vx, .vi)
+    std::istringstream stream_vmsbf_vv("vmsbf.vv v1, v2, v3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmsbf_vv), std::runtime_error);
+
+    std::istringstream stream_vmsof_vx("vmsof.vx v1, v2, x3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmsof_vx), std::runtime_error);
+
+    std::istringstream stream_vmsif_vi("vmsif.vi v1, v2, 3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmsif_vi), std::runtime_error);
+
+    // Invalid mask operand (only v0.t is allowed as third operand)
+    std::istringstream stream_vmsbf_bad_mask("vmsbf.m v1, v2, v1.t\n");
+    EXPECT_THROW(Kites::assemble(stream_vmsbf_bad_mask), std::runtime_error);
 }

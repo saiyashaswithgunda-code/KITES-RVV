@@ -236,6 +236,28 @@
 
   `vmsgt.vi`    Vector-immediate signed Yes         Yes         Yes         Yes Complete
                 greater-than comparison
+
+  `vmand.mm`    Vector-vector mask AND  Yes         Yes         Yes         Yes Complete
+
+  `vmandn.mm`   Vector-vector mask AND  Yes         Yes         Yes         Yes Complete
+                with inverted source 2
+
+  `vmor.mm`     Vector-vector mask OR   Yes         Yes         Yes         Yes Complete
+
+  `vmorn.mm`    Vector-vector mask OR   Yes         Yes         Yes         Yes Complete
+                with inverted source 2
+
+  `vmxor.mm`    Vector-vector mask XOR  Yes         Yes         Yes         Yes Complete
+
+  `vmsbf.m`     Vector mask set-before- Yes         Yes         Yes         Yes Complete
+                first mask bit
+
+  `vmsof.m`     Vector mask set-only-   Yes         Yes         Yes         Yes Complete
+                first mask bit
+
+  `vmsif.m`     Vector mask set-        Yes         Yes         Yes         Yes Complete
+                including-first mask
+                bit
   -----------------------------------------------------------------------------------------
 
 ## 3. Pending arithmetic candidates
@@ -254,20 +276,34 @@ Additional candidate families for future implementation:
 Note: do not assume `vsub.vi` is a valid substitute for `vrsub.vi`.
 Verify mnemonic availability and operand semantics in the specification.
 
-## 4. Pending mask operations
+## 4. Mask operations
 
-Potential mask logical operations:
+Implemented in Batch 2:
 
-  Instruction   Operation   Status
-  ------------- ----------- ---------
-  `vmand.mm`    Mask AND    Pending
-  `vmor.mm`     Mask OR     Pending
-  `vmxor.mm`    Mask XOR    Pending
-  `vmnot.m`     Mask NOT    Pending
+  Instruction   Operation                                      Status
+  ------------- ---------------------------------------------- ---------
+  `vmand.mm`    Mask AND                                       Complete
+  `vmandn.mm`   Mask AND with inverted source 2                Complete
+  `vmor.mm`     Mask OR                                        Complete
+  `vmorn.mm`    Mask OR with inverted source 2                 Complete
+  `vmxor.mm`    Mask XOR                                       Complete
+  `vmsbf.m`     Mask set-before-first                          Complete
+  `vmsof.m`     Mask set-only-first                            Complete
+  `vmsif.m`     Mask set-including-first                       Complete
 
-These instructions operate on packed mask bits. They need a mask-aware
-execution path and tests; ordinary SEW-wide arithmetic handling is not
-automatically suitable.
+Pending / deferred mask logical operations:
+
+  Instruction   Operation                                      Status
+  ------------- ---------------------------------------------- ---------
+  `vmnand.mm`   Mask NAND                                      Pending
+  `vmnor.mm`    Mask NOR                                       Pending
+  `vmxnor.mm`   Mask XNOR                                      Pending
+  `vmnot.m`     Mask NOT (pseudo for `vmorn.mm vd, vs, vs`)    Pending
+
+These instructions operate on packed mask bits. Active elements are computed
+bitwise on mask registers. Mask prefix instructions scan for the first active
+set bit, ignoring inactive elements (where `v0[i] == 0`). Tail elements in
+`[vl, VLMAX)` are set to 1 (deterministic tail agnostic policy).
 
 ## 5. Optional memory extensions
 
@@ -323,15 +359,23 @@ instruction or coherent instruction family.
 
   Vector            Completed    `rvv-       Complete    Vector-     All 20 legal
   comparisons                    development2`           Arithmetic  forms (.vv/.vx/.vi),
-  (`vmseq`,                                              Test,       packed mask vd,
-  `vmsne`, `vmslt`,                                      Vector-     deterministic
-  `vmsltu`, `vmsle`,                                     Assembler   tail agnostic to
-  `vmsleu`, `vmsgt`,                                     Test        VLMAX, vstart>=vl,
-  `vmsgtu`)                                                          aliasing, SEW 8-64
+  (`vmseq`,                                              Test,       realigned to standard
+  `vmsne`, `vmslt`,                                      Vector-     OPIVV/OPIVX/OPIVI,
+  `vmsltu`, `vmsle`,                                     Assembler   packed mask vd,
+  `vmsleu`, `vmsgt`,                                     Test        tail agnostic to
+  `vmsgtu`)                                                          VLMAX, vstart>=vl
 
-  Mask logical      Unassigned   ---         Pending     ---         Packed mask
-  operations                                                         bit
-                                                                     operations
+  Mask logical &    Completed    `rvv-       Complete    Vector-     Packed mask bits,
+  prefix                         development2`           Arithmetic  OPMVV funct3=010,
+  operations                                             Test,       tail agnostic to
+  (`vmand.mm`,                                           Vector-     VLMAX, vstart>=vl,
+  `vmandn.mm`,                                           Assembler   prefix active scan,
+  `vmor.mm`,                                             Test        overlap & edge cases
+  `vmorn.mm`,
+  `vmxor.mm`,
+  `vmsbf.m`,
+  `vmsof.m`,
+  `vmsif.m`)
 
   Shift             Completed    `rvv-       Complete    Vector-     Shift amount
   operations                     development2`           Arithmetic  mod SEW, uimm5
