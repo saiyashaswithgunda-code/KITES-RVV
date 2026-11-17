@@ -98,6 +98,36 @@
   `vse64.v`     Unit-stride             Yes         Yes         Yes         Yes Complete
                 store, EEW=64
 
+  `vlse8.v`     Strided load,           Yes         Yes         Yes         Yes Complete
+                EEW=8
+
+  `vlse16.v`    Strided load,           Yes         Yes         Yes         Yes Complete
+                EEW=16
+
+  `vlse32.v`    Strided load,           Yes         Yes         Yes         Yes Complete
+                EEW=32
+
+  `vlse64.v`    Strided load,           Yes         Yes         Yes         Yes Complete
+                EEW=64
+
+  `vsse8.v`     Strided store,          Yes         Yes         Yes         Yes Complete
+                EEW=8
+
+  `vsse16.v`    Strided store,          Yes         Yes         Yes         Yes Complete
+                EEW=16
+
+  `vsse32.v`    Strided store,          Yes         Yes         Yes         Yes Complete
+                EEW=32
+
+  `vsse64.v`    Strided store,          Yes         Yes         Yes         Yes Complete
+                EEW=64
+
+  `vlm.v`       Mask load,              Yes         Yes         Yes         Yes Complete
+                EEW=8
+
+  `vsm.v`       Mask store,             Yes         Yes         Yes         Yes Complete
+                EEW=8
+
   `vsll.vv`     Vector-vector           Yes         Yes         Yes         Yes Complete
                 logical shift left
 
@@ -310,11 +340,13 @@ set bit, ignoring inactive elements (where `v0[i] == 0`). Tail elements in
   -----------------------------------------------------------------------
   Family                  Example mnemonics       Status
   ----------------------- ----------------------- -----------------------
-  Strided loads           `vlse8.v`, `vlse16.v`,  Optional / pending
+  Strided loads           `vlse8.v`, `vlse16.v`,  Complete
                           `vlse32.v`, `vlse64.v`
 
-  Strided stores          `vsse8.v`, `vsse16.v`,  Optional / pending
+  Strided stores          `vsse8.v`, `vsse16.v`,  Complete
                           `vsse32.v`, `vsse64.v`
+
+  Mask memory             `vlm.v`, `vsm.v`        Complete
 
   Indexed unordered loads `vluxei*.v`             Optional / pending
 
@@ -327,7 +359,7 @@ set bit, ignoring inactive elements (where `v0[i] == 0`). Tail elements in
   -----------------------------------------------------------------------
 
 These require additional operand syntax, instruction fields, and
-address-generation semantics. Treat them as a separate milestone.
+address-generation semantics. Indexed memory remains as a candidate extension.
 
 ## 6. Contributor assignment
 
@@ -398,8 +430,26 @@ instruction or coherent instruction family.
   `vrem`, `vremu`)                                       Assembler   vstart >= vl fix
                                                          Test
 
-  Strided/indexed   Unassigned   ---         Optional    ---         Separate
-  memory                                                             larger phase
+  Strided vector    Completed    `rvv-       Complete    Vector-     SEW 8/16/32/64,
+  memory                         development2`           Memory      signed stride via
+  (`vlse*.v`,                                            Test,       unsigned modular
+  `vsse*.v`)                                             Vector-     arithmetic, zero stride,
+                                                         Assembler   overlap stride < EEW,
+                                                         Test        unique-address byte delta
+                                                                     tracking for undo/redo
+
+  Mask vector       Completed    `rvv-       Complete    Vector-     EEW=8, EMUL=1, vm=1,
+  memory                         development2`           Memory      evl=ceil(vl/8) bytes,
+  (`vlm.v`,                                              Test,       always tail-agnostic,
+  `vsm.v`)                                               Vector-     delta tracking for
+                                                         Assembler   undo/redo
+                                                         Test
+
+  Indexed memory    Unassigned   ---         Optional    ---         Separate
+  (`vluxei`,                                                         larger phase
+  `vloxei`,
+  `vsuxei`,
+  `vsoxei`)
   --------------------------------------------------------------------------------
 
 ## 7. Rules for updating this tracker

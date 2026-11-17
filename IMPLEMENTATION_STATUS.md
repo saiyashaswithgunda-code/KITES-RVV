@@ -2,9 +2,9 @@
 
 ## 1. Status summary
 
-**Latest known verification:** 405/405 tests passed (100% CTest pass rate).
+**Latest known verification:** 435/435 tests passed (100% CTest pass rate).
 
-The statuses below describe the implementation after Batch 1 vector comparisons (realigned to RVV 1.0 OPIVV/OPIVX/OPIVI encodings), Batch 2 mask logical and prefix operations, and Batch 5 integer division and remainder. A
+The statuses below describe the implementation after Batch 1 vector comparisons (realigned to RVV 1.0 OPIVV/OPIVX/OPIVI encodings), Batch 2 mask logical and prefix operations, Batch 3 strided and mask memory instructions, and Batch 5 integer division and remainder. A
 new contributor should run the full suite before making changes to
 confirm the current checkout still matches this baseline.
 
@@ -84,8 +84,15 @@ confirm the current checkout still matches this baseline.
   Vector mask prefix      Complete                3 instructions (vmsbf, vmsof,
   instructions                                    vmsif.m), unmasked & masked
 
-  Strided/indexed memory  Pending / optional      Not part of current
-                                                  memory subset
+  Strided vector memory   Complete                8 instructions (vlse8/16/32/64.v,
+                                                  vsse8/16/32/64.v), signed stride,
+                                                  zero stride broadcast, unique-byte deltas
+
+  Mask vector memory      Complete                2 instructions (vlm.v, vsm.v),
+                                                  EEW=8, EMUL=1, EVL=ceil(vl/8),
+                                                  always tail-agnostic
+
+  Indexed memory          Pending / optional      vluxei, vloxei, vsuxei, vsoxei
 
   Fractional and grouped  Unsupported             Current decoder accepts
   LMUL                                            only m1
@@ -285,6 +292,38 @@ Current implementation is limited to: - Unit stride. - Single field
 (`nf=0`). - `mew=0`. - `mop=0`. - `lumop/sumop=0`. - `vm=0` or `vm=1`. -
 SEW must match the memory element width. - LMUL=m1.
 
+### Strided vector memory
+
+Loads: - `vlse8.v` - `vlse16.v` - `vlse32.v` - `vlse64.v`
+
+Stores: - `vsse8.v` - `vsse16.v` - `vsse32.v` - `vsse64.v`
+
+Current implementation supports:
+- Strided loads and stores for EEW = 8, 16, 32, 64 bits.
+- Address calculation: `element_address(i) = base + static_cast<uint64_t>(i) * static_cast<uint64_t>(stride)` using 64-bit unsigned modular arithmetic to cleanly support negative two's-complement strides without C++ undefined behavior.
+- Base address from `rs1`, byte stride from scalar GPR `rs2` (with `rs2 = x0` yielding stride 0).
+- Zero stride load acts as a broadcast of element 0 across all active vector elements; zero stride store writes elements sequentially ($0$ to $vl - 1$) with the highest active element value remaining in memory.
+- Element overlap handling ($|stride| < EEW$): unique-address byte delta tracking (`std::map<uint64_t, uint8_t>`) records each modified byte exactly once per vector instruction, ensuring complete and correct undo/redo reversibility.
+- Masked execution (`vm=0` and `vm=1`): inactive elements perform no memory reads or writes; mask-agnostic destination elements updated according to `vma`.
+- `vstart` handling: resumes execution from element index `vstart`; $vstart \ge vl$ performs zero memory transfers, zero destination writes, and resets `vstart` to 0 on writeback.
+- Fault/validation: instruction is rejected if `SEW != EEW`, `mop != 10`, `nf != 0`, or `mew != 0`.
+
+### Mask vector memory
+
+Loads: - `vlm.v`
+
+Stores: - `vsm.v`
+
+Current implementation supports:
+- Mask load and store transferring packed mask elements as bytes with EEW = 8, EMUL = 1, independent of configured SEW.
+- Effective vector length: $evl = \min(\lceil vl / 8 \rceil, 16)$ bytes.
+- When $vl = 0$ ($evl = 0$), no memory accesses or register writes are performed, and `vstart` resets to 0.
+- When $vl$ is not a multiple of 8, the entire partial final byte is transferred in full without masking out upper bits.
+- Destination register tail policy: mask destination bytes $[evl, 16)$ are always tail-agnostic (set to `0xFF`), regardless of `vtype.vta`.
+- Encoding validation: `mop = 00`, `lumop/sumop = 01011`, `funct3 = 000`, `vm = 1`; $vm = 0$ is reserved and rejected.
+- `vstart` handling: $vstart$ is interpreted as a byte index; $vstart \ge evl$ performs zero memory transfers or register modifications, and resets `vstart` to 0.
+- Full undo/redo fidelity with unique-address byte delta tracking.
+
 ## 3. Known implementation constraints
 
 These constraints are intentional unless a future contributor explicitly
@@ -297,7 +336,7 @@ expands the scope:
 4.  Vector arithmetic currently supports the vector-vector, vector-scalar,
     vector-immediate integer operations, and single-width sum reduction
     listed above.
-5.  Current memory support is unit-stride and single-field only.
+5.  Current memory support includes unit-stride, strided, and mask load/store operations (single-field nf=0, mew=0, mop=00/10). Indexed memory is not yet supported.
 6.  The current memory execution path uses the existing RVSS memory
     controller and current-delta tracking. Do not assume it already
     implements all architectural exception and fault semantics required
@@ -363,15 +402,18 @@ Implemented integer divide/remainder additions:
 - `vdiv.vv`, `vdiv.vx`, `vdivu.vv`, `vdivu.vx`
 - `vrem.vv`, `vrem.vx`, `vremu.vv`, `vremu.vx`
 
-### Priority E --- Additional memory addressing (optional)
+### Priority E --- Additional memory addressing
 
-Potential additions: - Strided loads/stores (`vlse*.v`, `vsse*.v`). -
-Indexed loads/stores (`vluxei*.v`, `vloxei*.v`, `vsuxei*.v`,
-`vsoxei*.v`).
+Implemented additions:
+- Strided loads: `vlse8.v`, `vlse16.v`, `vlse32.v`, `vlse64.v`
+- Strided stores: `vsse8.v`, `vsse16.v`, `vsse32.v`, `vsse64.v`
+- Mask memory: `vlm.v`, `vsm.v`
 
-These require decoding additional memory fields and calculating
-per-element addresses. They are a larger scope increase than adding
-arithmetic instructions.
+Pending optional memory candidates:
+- Indexed unordered loads/stores (`vluxei*.v`, `vsuxei*.v`)
+- Indexed ordered loads/stores (`vloxei*.v`, `vsoxei*.v`)
+
+These require decoding additional vector-indexed memory formats and calculating per-element addresses based on vector index registers.
 
 ## 5. Important semantic checklist for every new instruction
 

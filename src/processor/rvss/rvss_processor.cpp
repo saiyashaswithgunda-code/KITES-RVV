@@ -1447,102 +1447,151 @@ void RVSSProcessor::ExecuteVectorMaskPrefix()
 void RVSSProcessor::ExecuteVectorMemory()
 {
     vector_mem_pending_ = false;
+    vector_mem_is_stride_ = false;
+    vector_mem_is_mask_ = false;
+    vector_mem_stride_ = 0;
+    vector_mem_element_bytes_ = 0;
+    vector_mem_load_ = false;
+    vector_mem_reg_ = 0;
+    vector_mem_base_ = 0;
+    vector_mem_vm_ = 1;
+    vector_mem_tail_agnostic_ = false;
+    vector_mem_mask_agnostic_ = false;
+    vector_mem_old_value_.fill(0);
+    vector_mem_new_value_.fill(0);
+    vector_mem_mask_value_.fill(0);
 
     const uint32_t instruction = current_instruction_;
 
     const uint8_t opcode = instruction & 0x7F;
+    if (opcode != 0x07 && opcode != 0x27)
+    {
+        return;
+    }
+
+    const bool is_load = (opcode == 0x07);
     const uint8_t funct3 = (instruction >> 12) & 0x7;
-
-    // We support unit-stride, single-field operations.
-    // Both masked and unmasked operations are supported.
-    const uint8_t nf = (instruction >> 29) & 0x7;
-    const uint8_t mew = (instruction >> 28) & 0x1;
-    const uint8_t mop = (instruction >> 26) & 0x3;
+    const uint8_t rs1 = (instruction >> 15) & 0x1F;
+    const uint8_t rs2_or_lumop = (instruction >> 20) & 0x1F;
     const uint8_t vm = (instruction >> 25) & 0x1;
-    const uint8_t lumop_sumop = (instruction >> 20) & 0x1F;
+    const uint8_t mop = (instruction >> 26) & 0x3;
+    const uint8_t mew = (instruction >> 28) & 0x1;
+    const uint8_t nf = (instruction >> 29) & 0x7;
+    const uint8_t vd_vs3 = (instruction >> 7) & 0x1F;
 
-    if (nf != 0 || mew != 0 || mop != 0 ||
-        lumop_sumop != 0)
+    if (nf != 0 || mew != 0)
     {
         return;
     }
 
-    // Determine element width from the instruction.
-    switch (funct3)
-    {
-    case 0b000:
-        vector_mem_element_bytes_ = 1;
-        break;
-
-    case 0b101:
-        vector_mem_element_bytes_ = 2;
-        break;
-
-    case 0b110:
-        vector_mem_element_bytes_ = 4;
-        break;
-
-    case 0b111:
-        vector_mem_element_bytes_ = 8;
-        break;
-
-    default:
-        return;
-    }
-
-    // Decode the current vector configuration.
-    const uint64_t vtype =
-        registers_.ReadCsr(RegisterFile::CSR_VTYPE);
-
+    // Decode current vector configuration
+    const uint64_t vtype = registers_.ReadCsr(RegisterFile::CSR_VTYPE);
     const VectorConfig config = DecodeVectorConfig(vtype);
 
-    // Require the memory element width to match the configured SEW.
-    if (config.vill ||
-        config.sew_bits != vector_mem_element_bytes_ * 8)
+    if (mop == 0b00 && rs2_or_lumop == 0b01011)
     {
+        // Vector mask load/store: vlm.v / vsm.v
+        if (funct3 != 0b000 || vm != 1)
+        {
+            return;
+        }
+
+        if (config.vill)
+        {
+            return;
+        }
+
+        vector_mem_is_mask_ = true;
+        vector_mem_element_bytes_ = 1;
+        vector_mem_load_ = is_load;
+        vector_mem_reg_ = vd_vs3;
+        vector_mem_base_ = registers_.ReadGpr(rs1);
+        vector_mem_vm_ = 1;
+        vector_mem_old_value_ = registers_.ReadVreg(vector_mem_reg_);
+        vector_mem_new_value_ = vector_mem_old_value_;
+        vector_mem_pending_ = true;
         return;
     }
-
-    const uint64_t vl =
-        registers_.ReadCsr(RegisterFile::CSR_VL);
-
-    const uint64_t vstart =
-        registers_.ReadCsr(RegisterFile::CSR_VSTART);
-
-    const uint64_t max_elements =
-        RegisterFile::VLEN_BYTES / vector_mem_element_bytes_;
-
-    if (vl > max_elements || vstart > vl)
+    else if (mop == 0b10)
     {
+        // Strided vector memory: vlse*.v / vsse*.v
+        uint8_t elem_bytes = 0;
+        switch (funct3)
+        {
+        case 0b000: elem_bytes = 1; break;
+        case 0b101: elem_bytes = 2; break;
+        case 0b110: elem_bytes = 4; break;
+        case 0b111: elem_bytes = 8; break;
+        default: return;
+        }
+
+        if (config.vill || config.sew_bits != elem_bytes * 8)
+        {
+            return;
+        }
+
+        const uint64_t vl = registers_.ReadCsr(RegisterFile::CSR_VL);
+        const uint64_t max_elements = RegisterFile::VLEN_BYTES / elem_bytes;
+
+        if (vl > max_elements)
+        {
+            return;
+        }
+
+        vector_mem_is_stride_ = true;
+        vector_mem_stride_ = static_cast<int64_t>(registers_.ReadGpr(rs2_or_lumop));
+        vector_mem_element_bytes_ = elem_bytes;
+        vector_mem_load_ = is_load;
+        vector_mem_reg_ = vd_vs3;
+        vector_mem_base_ = registers_.ReadGpr(rs1);
+        vector_mem_vm_ = vm;
+        vector_mem_tail_agnostic_ = config.tail_agnostic;
+        vector_mem_mask_agnostic_ = config.mask_agnostic;
+        vector_mem_mask_value_ = registers_.ReadVreg(0);
+        vector_mem_old_value_ = registers_.ReadVreg(vector_mem_reg_);
+        vector_mem_new_value_ = vector_mem_old_value_;
+        vector_mem_pending_ = true;
         return;
     }
+    else if (mop == 0b00 && rs2_or_lumop == 0b00000)
+    {
+        // Unit-stride vector memory: vle*.v / vse*.v
+        uint8_t elem_bytes = 0;
+        switch (funct3)
+        {
+        case 0b000: elem_bytes = 1; break;
+        case 0b101: elem_bytes = 2; break;
+        case 0b110: elem_bytes = 4; break;
+        case 0b111: elem_bytes = 8; break;
+        default: return;
+        }
 
-    // Save mask and tail configuration.
-    vector_mem_vm_ = vm;
-    vector_mem_tail_agnostic_ = config.tail_agnostic;
-    vector_mem_mask_agnostic_ = config.mask_agnostic;
+        if (config.vill || config.sew_bits != elem_bytes * 8)
+        {
+            return;
+        }
 
-    // Snapshot v0 so masking uses its original contents.
-    vector_mem_mask_value_ = registers_.ReadVreg(0);
+        const uint64_t vl = registers_.ReadCsr(RegisterFile::CSR_VL);
+        const uint64_t max_elements = RegisterFile::VLEN_BYTES / elem_bytes;
 
-    vector_mem_load_ = (opcode == 0x07);
+        if (vl > max_elements)
+        {
+            return;
+        }
 
-    // Bits 11:7 contain vd for loads and vs3 for stores.
-    vector_mem_reg_ = (instruction >> 7) & 0x1F;
-
-    // Bits 19:15 contain the base address register.
-    const uint8_t rs1 = (instruction >> 15) & 0x1F;
-
-    vector_mem_base_ = registers_.ReadGpr(rs1);
-
-    // Preserve the original vector register.
-    vector_mem_old_value_ =
-        registers_.ReadVreg(vector_mem_reg_);
-
-    // Loads modify this copy; stores use the original data.
-    vector_mem_new_value_ = vector_mem_old_value_;
-
-    vector_mem_pending_ = true;
+        vector_mem_element_bytes_ = elem_bytes;
+        vector_mem_load_ = is_load;
+        vector_mem_reg_ = vd_vs3;
+        vector_mem_base_ = registers_.ReadGpr(rs1);
+        vector_mem_vm_ = vm;
+        vector_mem_tail_agnostic_ = config.tail_agnostic;
+        vector_mem_mask_agnostic_ = config.mask_agnostic;
+        vector_mem_mask_value_ = registers_.ReadVreg(0);
+        vector_mem_old_value_ = registers_.ReadVreg(vector_mem_reg_);
+        vector_mem_new_value_ = vector_mem_old_value_;
+        vector_mem_pending_ = true;
+        return;
+    }
 }
 
 
@@ -2107,88 +2156,225 @@ void RVSSProcessor::WriteMemoryVector()
     const uint64_t vstart =
         registers_.ReadCsr(RegisterFile::CSR_VSTART);
 
-    const size_t element_bytes = vector_mem_element_bytes_;
+    if (vector_mem_is_mask_)
+    {
+        const uint64_t evl =
+            std::min<uint64_t>((vl + 7) / 8, RegisterFile::VLEN_BYTES);
 
+        // Valid no-body case: if vstart >= evl (including vl == 0), no memory access and no tail writes
+        if (vstart >= evl)
+            return;
+
+        std::map<uint64_t, uint8_t> original_bytes;
+
+        for (uint64_t b = vstart; b < evl; ++b)
+        {
+            const uint64_t address = vector_mem_base_ + b;
+            if (vector_mem_load_)
+            {
+                vector_mem_new_value_[b] =
+                    memory_controller_.readByte(address);
+            }
+            else
+            {
+                if (original_bytes.find(address) == original_bytes.end())
+                {
+                    original_bytes[address] =
+                        memory_controller_.peekByte(address);
+                }
+
+                memory_controller_.writeByte(
+                    address,
+                    vector_mem_old_value_[b]);
+            }
+        }
+
+        // Always tail-agnostic for vlm.v when vstart < evl
+        if (vector_mem_load_)
+        {
+            for (size_t b = evl; b < RegisterFile::VLEN_BYTES; ++b)
+            {
+                vector_mem_new_value_[b] = 0xFF;
+            }
+        }
+        else
+        {
+            // Unique-address byte tracking for mask stores
+            for (const auto &entry : original_bytes)
+            {
+                const uint8_t final_byte =
+                    memory_controller_.peekByte(entry.first);
+                if (entry.second != final_byte)
+                {
+                    current_delta_.memory_changes.push_back(
+                        {entry.first, {entry.second}, {final_byte}});
+                }
+            }
+        }
+        return;
+    }
+
+    const size_t element_bytes = vector_mem_element_bytes_;
     const size_t max_elements =
         RegisterFile::VLEN_BYTES / element_bytes;
 
-    for (uint64_t i = vstart; i < vl && i < max_elements; ++i)
+    // Valid no-body case: if vstart >= vl (including vl == 0), no memory access and no tail writes
+    if (vstart >= vl)
+        return;
+
+    if (vector_mem_is_stride_)
     {
-        const size_t offset = i * element_bytes;
+        // Unique-address byte tracking for strided stores
+        std::map<uint64_t, uint8_t> original_bytes;
 
-        // vm=1 means unmasked; otherwise check bit i in v0.
-        const bool mask_active =
-            vector_mem_vm_ == 1 ||
-            ((vector_mem_mask_value_[i / 8] >> (i % 8)) & 0x01) != 0;
-
-        if (!mask_active)
+        for (uint64_t i = vstart; i < vl && i < max_elements; ++i)
         {
-            if (vector_mem_load_ && vector_mem_mask_agnostic_)
+            const size_t offset = i * element_bytes;
+
+            const bool mask_active =
+                vector_mem_vm_ == 1 ||
+                ((vector_mem_mask_value_[i / 8] >> (i % 8)) & 0x01) != 0;
+
+            if (!mask_active)
             {
-                // Mask-agnostic load: inactive destination elements become all ones.
+                if (vector_mem_load_ && vector_mem_mask_agnostic_)
+                {
+                    for (size_t b = 0; b < element_bytes; ++b)
+                    {
+                        vector_mem_new_value_[offset + b] = 0xFF;
+                    }
+                }
+                continue;
+            }
+
+            const uint64_t address = vector_mem_base_ +
+                static_cast<uint64_t>(i) * static_cast<uint64_t>(vector_mem_stride_);
+
+            if (vector_mem_load_)
+            {
+                for (size_t b = 0; b < element_bytes; ++b)
+                {
+                    vector_mem_new_value_[offset + b] =
+                        memory_controller_.readByte(address + b);
+                }
+            }
+            else
+            {
+                for (size_t b = 0; b < element_bytes; ++b)
+                {
+                    const uint64_t byte_addr = address + b;
+                    if (original_bytes.find(byte_addr) == original_bytes.end())
+                    {
+                        original_bytes[byte_addr] =
+                            memory_controller_.peekByte(byte_addr);
+                    }
+
+                    memory_controller_.writeByte(
+                        byte_addr,
+                        vector_mem_old_value_[offset + b]);
+                }
+            }
+        }
+
+        if (!vector_mem_load_)
+        {
+            for (const auto &entry : original_bytes)
+            {
+                const uint8_t final_byte =
+                    memory_controller_.peekByte(entry.first);
+                if (entry.second != final_byte)
+                {
+                    current_delta_.memory_changes.push_back(
+                        {entry.first, {entry.second}, {final_byte}});
+                }
+            }
+        }
+        else if (vector_mem_tail_agnostic_)
+        {
+            for (uint64_t i = vl; i < max_elements; ++i)
+            {
+                const size_t offset = i * element_bytes;
+
                 for (size_t b = 0; b < element_bytes; ++b)
                 {
                     vector_mem_new_value_[offset + b] = 0xFF;
                 }
             }
-
-            // Masked-off stores never access memory.
-            continue;
-        }
-
-        const uint64_t address =
-            vector_mem_base_ + i * element_bytes;
-
-        if (vector_mem_load_)
-        {
-            // Load the active element into the pending destination.
-            for (size_t b = 0; b < element_bytes; ++b)
-            {
-                vector_mem_new_value_[offset + b] =
-                    memory_controller_.readByte(address + b);
-            }
-        }
-        else
-        {
-            // Record old memory contents for Undo.
-            std::vector<uint8_t> old_bytes;
-            std::vector<uint8_t> new_bytes;
-
-            for (size_t b = 0; b < element_bytes; ++b)
-            {
-                old_bytes.push_back(
-                    memory_controller_.peekByte(address + b));
-
-                new_bytes.push_back(
-                    vector_mem_old_value_[offset + b]);
-            }
-
-            // Write the active vector element to memory.
-            for (size_t b = 0; b < element_bytes; ++b)
-            {
-                memory_controller_.writeByte(
-                    address + b,
-                    new_bytes[b]);
-            }
-
-            if (old_bytes != new_bytes)
-            {
-                current_delta_.memory_changes.push_back(
-                    {address, old_bytes, new_bytes});
-            }
         }
     }
-
-    // Tail-agnostic behavior applies to loads, not stores.
-    if (vector_mem_load_ && vector_mem_tail_agnostic_)
+    else
     {
-        for (uint64_t i = vl; i < max_elements; ++i)
+        // Existing unit-stride memory execution and delta recording preserved exactly
+        for (uint64_t i = vstart; i < vl && i < max_elements; ++i)
         {
             const size_t offset = i * element_bytes;
 
-            for (size_t b = 0; b < element_bytes; ++b)
+            const bool mask_active =
+                vector_mem_vm_ == 1 ||
+                ((vector_mem_mask_value_[i / 8] >> (i % 8)) & 0x01) != 0;
+
+            if (!mask_active)
             {
-                vector_mem_new_value_[offset + b] = 0xFF;
+                if (vector_mem_load_ && vector_mem_mask_agnostic_)
+                {
+                    for (size_t b = 0; b < element_bytes; ++b)
+                    {
+                        vector_mem_new_value_[offset + b] = 0xFF;
+                    }
+                }
+                continue;
+            }
+
+            const uint64_t address =
+                vector_mem_base_ + i * element_bytes;
+
+            if (vector_mem_load_)
+            {
+                for (size_t b = 0; b < element_bytes; ++b)
+                {
+                    vector_mem_new_value_[offset + b] =
+                        memory_controller_.readByte(address + b);
+                }
+            }
+            else
+            {
+                std::vector<uint8_t> old_bytes;
+                std::vector<uint8_t> new_bytes;
+
+                for (size_t b = 0; b < element_bytes; ++b)
+                {
+                    old_bytes.push_back(
+                        memory_controller_.peekByte(address + b));
+
+                    new_bytes.push_back(
+                        vector_mem_old_value_[offset + b]);
+                }
+
+                for (size_t b = 0; b < element_bytes; ++b)
+                {
+                    memory_controller_.writeByte(
+                        address + b,
+                        new_bytes[b]);
+                }
+
+                if (old_bytes != new_bytes)
+                {
+                    current_delta_.memory_changes.push_back(
+                        {address, old_bytes, new_bytes});
+                }
+            }
+        }
+
+        if (vector_mem_load_ && vector_mem_tail_agnostic_)
+        {
+            for (uint64_t i = vl; i < max_elements; ++i)
+            {
+                const size_t offset = i * element_bytes;
+
+                for (size_t b = 0; b < element_bytes; ++b)
+                {
+                    vector_mem_new_value_[offset + b] = 0xFF;
+                }
             }
         }
     }
@@ -2926,6 +3112,9 @@ void RVSSProcessor::Reset()
     vector_mem_element_bytes_ = 0;
     vector_mem_load_ = false;
     vector_mem_pending_ = false;
+    vector_mem_is_stride_ = false;
+    vector_mem_stride_ = 0;
+    vector_mem_is_mask_ = false;
     vector_mem_old_value_.fill(0);
     vector_mem_new_value_.fill(0);
     vector_mem_vm_ = 1;

@@ -149,13 +149,17 @@ describe it as the only architecturally valid agnostic result.
 Relevant files: - `src/processor/rvss/rvss_processor.cpp` -
 `src/processor/rvss/rvss_processor.h` - `test/vector_memory_test.cpp`
 
-Implemented: - `vle8.v`, `vle16.v`, `vle32.v`, `vle64.v` - `vse8.v`,
-`vse16.v`, `vse32.v`, `vse64.v`
+Implemented:
+- Unit-stride memory: `vle8.v`, `vle16.v`, `vle32.v`, `vle64.v`, `vse8.v`, `vse16.v`, `vse32.v`, `vse64.v`
+- Strided memory: `vlse8.v`, `vlse16.v`, `vlse32.v`, `vlse64.v`, `vsse8.v`, `vsse16.v`, `vsse32.v`, `vsse64.v`
+- Mask memory: `vlm.v`, `vsm.v`
 
 Current encoding subset: - opcode `0x07` for loads. - opcode `0x27` for
-stores. - `nf=0`, `mew=0`, `mop=0`. - `lumop/sumop=0` for unit-stride. -
-`vm` can be 0 or 1. - `funct3` selects element width: 000=8-bit,
-101=16-bit, 110=32-bit, 111=64-bit.
+stores. - `nf=0`, `mew=0`. - `mop=00`, `lumop/sumop=00000` for unit-stride. -
+`mop=10` for strided memory (stride register in `rs2`). -
+`mop=00`, `lumop/sumop=01011`, `funct3=000`, `vm=1` for mask memory. -
+`vm` can be 0 or 1 for unit-stride and strided; `vm` must be 1 for mask memory. -
+`funct3` selects element width: 000=8-bit, 101=16-bit, 110=32-bit, 111=64-bit.
 
 The execution path checks: - supported unit-stride encoding fields. -
 valid VTYPE. - SEW matches memory element width. - `vl` and `vstart` fit
@@ -256,7 +260,8 @@ scalar operands. 10. Add parser and exact machine encoding tests.
 
 Existing vector syntax types include: - `O_GPR_C_GPR_C_VTYPE` for
 `vsetvli`. - `O_VREG_C_VREG_C_VREG` for vector-vector arithmetic. -
-`O_VREG_C_LP_GPR_RP` for vector memory operands (`vd/vs3, (base)`).
+`O_VREG_C_LP_GPR_RP` for vector memory operands (`vd/vs3, (base)`). -
+`O_VREG_C_LP_GPR_RP_C_GPR` for strided vector memory operands (`vd/vs3, (base), stride`).
 
 Vector registers are lexed as `VEC_REGISTER` for `v0` through `v31`.
 

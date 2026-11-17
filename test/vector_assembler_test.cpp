@@ -6,6 +6,7 @@
 #include <string>
 
 #include "assembler/assembler.h"
+#include "assembler/code_generator.h"
 #include "utils/utils.h"
 
 namespace
@@ -960,4 +961,135 @@ TEST(VectorAssemblerTest, RejectsUnsupportedMaskLogicalAndPrefixForms)
     // Invalid mask operand (only v0.t is allowed as third operand)
     std::istringstream stream_vmsbf_bad_mask("vmsbf.m v1, v2, v1.t\n");
     EXPECT_THROW(Kites::assemble(stream_vmsbf_bad_mask), std::runtime_error);
+}
+
+TEST(VectorAssemblerTest, EncodesAllVectorStridedMemoryInstructions)
+{
+    struct TestCase
+    {
+        const char *instruction;
+        uint32_t expected;
+    };
+
+    // mop=10 (bits 27:26), vm=1 (bit 25), rs2=x11 (bits 24:20), rs1=x10 (bits 19:15), vd/vs3=v3 (bits 11:7)
+    // vlse: opcode = 0x07
+    // vsse: opcode = 0x27
+    const TestCase cases[] = {
+        {"vlse8.v v3, (x10), x11",  0x0AB50187u},
+        {"vlse16.v v3, (x10), x11", 0x0AB55187u},
+        {"vlse32.v v3, (x10), x11", 0x0AB56187u},
+        {"vlse64.v v3, (x10), x11", 0x0AB57187u},
+
+        {"vsse8.v v3, (x10), x11",  0x0AB501A7u},
+        {"vsse16.v v3, (x10), x11", 0x0AB551A7u},
+        {"vsse32.v v3, (x10), x11", 0x0AB561A7u},
+        {"vsse64.v v3, (x10), x11", 0x0AB571A7u}
+    };
+
+    for (const auto &testCase : cases)
+    {
+        SCOPED_TRACE(testCase.instruction);
+
+        std::string source = std::string(testCase.instruction) + "\n";
+        EXPECT_EQ(assembleVectorMemory(source), testCase.expected);
+    }
+}
+
+TEST(VectorAssemblerTest, EncodesMaskedVectorStridedMemoryInstructions)
+{
+    // Masked with v0.t (vm = 0, bit 25 = 0)
+    EXPECT_EQ(
+        assembleVectorMemory("vlse32.v v3, (x10), x11, v0.t\n"),
+        0x08B56187u
+    );
+
+    EXPECT_EQ(
+        assembleVectorMemory("vsse32.v v3, (x10), x11, v0.t\n"),
+        0x08B561A7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVectorStridedMemoryRegistersCorrectly)
+{
+    // vlse8.v v17, (x5), x6
+    // vm = 1, mop = 10, rs2 = x6 (6), rs1 = x5 (5), funct3 = 000, vd = v17 (17), opcode = 0x07
+    // (2 << 26) | (1 << 25) | (6 << 20) | (5 << 15) | (0 << 12) | (17 << 7) | 0x07
+    // = 0x0A000000 | 0x00600000 | 0x00028000 | 0x00000880 | 0x07 = 0x0A628887u
+    EXPECT_EQ(
+        assembleVectorMemory("vlse8.v v17, (x5), x6\n"),
+        0x0A628887u
+    );
+
+    // vsse8.v v17, (x5), x6
+    // opcode = 0x27 -> 0x0A6288A7u
+    EXPECT_EQ(
+        assembleVectorMemory("vsse8.v v17, (x5), x6\n"),
+        0x0A6288A7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVectorMaskMemoryInstructions)
+{
+    // vlm.v vd, (rs1)
+    // mop = 00, vm = 1, lumop = 01011 (11), rs1 = x10 (10), funct3 = 000, vd = v3 (3), opcode = 0x07
+    // (1 << 25) | (11 << 20) | (10 << 15) | (3 << 7) | 0x07 = 0x02B50187u
+    EXPECT_EQ(
+        assembleVectorMemory("vlm.v v3, (x10)\n"),
+        0x02B50187u
+    );
+
+    // vsm.v vs3, (rs1)
+    // opcode = 0x27 -> 0x02B501A7u
+    EXPECT_EQ(
+        assembleVectorMemory("vsm.v v3, (x10)\n"),
+        0x02B501A7u
+    );
+}
+
+TEST(VectorAssemblerTest, ReconstructsDisassemblyForStridedAndMaskMemory)
+{
+    Kites::setupVmStateDirectory();
+
+    const std::string source =
+        "vlse32.v v3, (x10), x11\n"
+        "vlse32.v v3, (x10), x11, v0.t\n"
+        "vsse32.v v3, (x10), x11\n"
+        "vlm.v v1, (x10)\n"
+        "vsm.v v1, (x10)\n";
+
+    std::istringstream stream(source);
+    Kites::AssembledProgram program = Kites::assemble(stream);
+
+    auto disassembled = Kites::printIntermediateCode(program.intermediate_code);
+    ASSERT_EQ(disassembled.size(), 5u);
+
+    EXPECT_EQ(disassembled[0], "vlse32.v v3, (x10), x11");
+    EXPECT_EQ(disassembled[1], "vlse32.v v3, (x10), x11, v0.t");
+    EXPECT_EQ(disassembled[2], "vsse32.v v3, (x10), x11");
+    EXPECT_EQ(disassembled[3], "vlm.v v1, (x10)");
+    EXPECT_EQ(disassembled[4], "vsm.v v1, (x10)");
+}
+
+TEST(VectorAssemblerTest, RejectsInvalidVectorStridedAndMaskMemorySyntax)
+{
+    Kites::setupVmStateDirectory();
+
+    // Missing stride operand
+    std::istringstream stream_missing_stride("vlse32.v v1, (x10)\n");
+    EXPECT_THROW(Kites::assemble(stream_missing_stride), std::runtime_error);
+
+    // Extra operand
+    std::istringstream stream_extra("vlse32.v v1, (x10), x11, x12\n");
+    EXPECT_THROW(Kites::assemble(stream_extra), std::runtime_error);
+
+    // Invalid mask operand (only v0.t is allowed)
+    std::istringstream stream_bad_mask("vlse32.v v1, (x10), x11, v1.t\n");
+    EXPECT_THROW(Kites::assemble(stream_bad_mask), std::runtime_error);
+
+    // Mask memory cannot have a mask operand
+    std::istringstream stream_vlm_masked("vlm.v v1, (x10), v0.t\n");
+    EXPECT_THROW(Kites::assemble(stream_vlm_masked), std::runtime_error);
+
+    std::istringstream stream_vsm_masked("vsm.v v1, (x10), v0.t\n");
+    EXPECT_THROW(Kites::assemble(stream_vsm_masked), std::runtime_error);
 }

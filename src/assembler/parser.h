@@ -134,6 +134,7 @@ class Parser
     bool parse_vector_vx();
     bool parse_vector_vi();
     bool parse_vector_memory();
+    bool parse_vector_strided_memory();
     
     bool parse_O_GPR_C_GPR_C_GPR();
     bool parse_O_GPR_C_GPR_C_I();

@@ -107,6 +107,17 @@ enum class Instruction
     kvmsof_m,
     kvmsif_m,
 
+    kvlse8_v,
+    kvlse16_v,
+    kvlse32_v,
+    kvlse64_v,
+    kvsse8_v,
+    kvsse16_v,
+    kvsse32_v,
+    kvsse64_v,
+    kvlm_v,
+    kvsm_v,
+
     kadd,
     ksub,
     kand,
@@ -502,6 +513,7 @@ enum class SyntaxType
     O_VREG_C_VREG_C_GPR,  ///< Opcode vector-register, vector-register, general-register
     O_VREG_C_VREG_C_I,    ///< Opcode vector-register, vector-register, immediate
     O_VREG_C_VREG,        ///< Opcode vector-register, vector-register [, v0.t]
+    O_VREG_C_LP_GPR_RP_C_GPR, ///< Opcode vector-register, (general-register), general-register [, v0.t]
 
     O_GPR_C_GPR_C_GPR,   ///< Opcode general-register , general-register , register
     O_GPR_C_GPR_C_I,     ///< Opcode general-register , general-register , immediate
