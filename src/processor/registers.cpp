@@ -83,6 +83,9 @@ void RegisterFile::WriteCsr(size_t reg, uint64_t value)
     if (reg >= NUM_CSR)
         throw std::out_of_range("Invalid CSR index");
     csr_[reg] = value;
+
+    if (reg == CSR_VSTART || reg == CSR_VL || reg == CSR_VTYPE || reg == CSR_VLENB)
+        emit vectorCsrChanged();
 }
 
 RegisterFile::VectorRegister RegisterFile::ReadVreg(size_t reg) const
@@ -99,6 +102,7 @@ void RegisterFile::WriteVreg(size_t reg, const VectorRegister &value)
         throw std::out_of_range("Invalid vector register index");
 
     vreg_[reg] = value;
+    emit updateVRegister(reg);
 }
 
 std::vector<uint64_t> RegisterFile::GetGprValues() const

@@ -406,6 +406,9 @@ void MainWindow::setUpTabs()
     m_tabs[TabIndex::CacheTabIndex]     = new CacheTab(this, m_processorManager->getMemoryController());
     m_tabs[TabIndex::CompilerTabIndex]  = new CompilerTab(this);
     m_tabs[TabIndex::ProfilerTabIndex]  = new ProfilerTab(this, m_processorManager->getProfiler());
+    // memory tab: highlight the bytes written by the latest step/undo/redo
+    connect(m_processorManager, &ProcessorManager::processorStateChangedSignal,
+            dynamic_cast<MemoryTab *>(m_tabs[TabIndex::MemoryTabIndex]), &MemoryTab::onStepFinished);
     // a little experiment
     connect(this, &MainWindow::processorChangedSignal,
             dynamic_cast<ProcessorTab *>(m_tabs[TabIndex::ProcessorTabIndex]),
@@ -450,6 +453,10 @@ bool MainWindow::tryParseAndLoadProgram()
         profilerTab->setSourceText(QString::fromStdString(rawText));
         
         m_processorManager->loadProgram(assembledProgram);
+        if (auto *memTab = dynamic_cast<MemoryTab *>(m_tabs[TabIndex::MemoryTabIndex]))
+        {
+            memTab->onProgramLoaded(); // loading writes the program image; not a step's changes
+        }
         m_processorManager->setBreakpoints(editor->getBreakpoints());
         return true;
     }

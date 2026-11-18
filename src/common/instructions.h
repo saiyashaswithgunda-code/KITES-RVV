@@ -77,6 +77,55 @@ enum class Instruction
     kvremu_vv,
     kvremu_vx,
 
+    kvmseq_vv,
+    kvmseq_vx,
+    kvmseq_vi,
+    kvmsne_vv,
+    kvmsne_vx,
+    kvmsne_vi,
+    kvmsltu_vv,
+    kvmsltu_vx,
+    kvmslt_vv,
+    kvmslt_vx,
+    kvmsleu_vv,
+    kvmsleu_vx,
+    kvmsleu_vi,
+    kvmsle_vv,
+    kvmsle_vx,
+    kvmsle_vi,
+    kvmsgtu_vx,
+    kvmsgtu_vi,
+    kvmsgt_vx,
+    kvmsgt_vi,
+
+    kvmandn_mm,
+    kvmand_mm,
+    kvmor_mm,
+    kvmxor_mm,
+    kvmorn_mm,
+    kvmsbf_m,
+    kvmsof_m,
+    kvmsif_m,
+
+    kvlse8_v,
+    kvlse16_v,
+    kvlse32_v,
+    kvlse64_v,
+    kvsse8_v,
+    kvsse16_v,
+    kvsse32_v,
+    kvsse64_v,
+    kvlm_v,
+    kvsm_v,
+
+    kvredmax_vs,
+    kvredmaxu_vs,
+    kvredmin_vs,
+    kvredminu_vs,
+    kvredand_vs,
+    kvredor_vs,
+    kvredxor_vs,
+
     kadd,
     ksub,
     kand,
@@ -471,6 +520,8 @@ enum class SyntaxType
     O_VREG_C_VREG_C_VREG, ///< Opcode vector-register, vector-register, vector-register
     O_VREG_C_VREG_C_GPR,  ///< Opcode vector-register, vector-register, general-register
     O_VREG_C_VREG_C_I,    ///< Opcode vector-register, vector-register, immediate
+    O_VREG_C_VREG,        ///< Opcode vector-register, vector-register [, v0.t]
+    O_VREG_C_LP_GPR_RP_C_GPR, ///< Opcode vector-register, (general-register), general-register [, v0.t]
 
     O_GPR_C_GPR_C_GPR,   ///< Opcode general-register , general-register , register
     O_GPR_C_GPR_C_I,     ///< Opcode general-register , general-register , immediate

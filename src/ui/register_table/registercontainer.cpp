@@ -2,7 +2,10 @@
 #include "ui_registercontainer.h"
 #include "processor/registers.h"
 #include "ui/common/collapsible_section.h"
+#include <QComboBox>
+#include <QHBoxLayout>
 #include <QHeaderView>
+#include <QLabel>
 #include <QSortFilterProxyModel>
 #include <QTableView>
 #include <QVBoxLayout>
@@ -38,7 +41,9 @@ class RegisterRangeProxyModel : public QSortFilterProxyModel
 
 RegisterContainer::RegisterContainer(QWidget *parent, RegisterFile *regfile)
     : QWidget(parent), ui(new Ui::RegisterContainer),
-      m_registerModel(new RegisterModel(this, regfile))
+      m_registerModel(new RegisterModel(this, regfile)),
+      m_vectorRegisterModel(new VectorRegisterModel(this, regfile)),
+      m_vectorCsrModel(new VectorCsrModel(this, regfile))
 {
     ui->setupUi(this);
     setupRegisterTable();
@@ -103,11 +108,79 @@ void RegisterContainer::setupRegisterTable()
         section->setContentWidget(tableView);
         sectionsLayout->addWidget(section);
     }
+
+    setupVectorSections(sectionsLayout);
+}
+
+// Adds the "Vector Registers" and "Vector CSRs" sections below the GPR/FPR ones. They use their
+// own models and are collapsed initially so the existing GPR/FPR layout is unchanged on start-up.
+void RegisterContainer::setupVectorSections(QVBoxLayout *sectionsLayout)
+{
+    // --- Vector Registers: format selector + v0-v31 table ---------------------------------
+    auto *vregSection = new CollapsibleSection("Vector Registers", ui->sectionsContainer);
+    auto *vregBody = new QWidget(vregSection);
+    auto *vregLayout = new QVBoxLayout(vregBody);
+    vregLayout->setContentsMargins(0, 0, 0, 0);
+    vregLayout->setSpacing(2);
+
+    auto *formatRow = new QHBoxLayout();
+    formatRow->addWidget(new QLabel("Element Format:", vregBody));
+    auto *formatCombo = new QComboBox(vregBody);
+    formatCombo->addItems({"Hexadecimal", "Unsigned Decimal", "Signed Decimal"});
+    formatRow->addWidget(formatCombo, 1);
+    vregLayout->addLayout(formatRow);
+
+    auto *vregView = new QTableView(vregBody);
+    vregView->setModel(m_vectorRegisterModel);
+    vregView->verticalHeader()->setVisible(false);
+    // The raw 128-bit value needs ~34 characters; size every column to its contents and let
+    // the view scroll horizontally when the panel is narrower than the table.
+    vregView->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    vregView->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
+    vregView->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    vregLayout->addWidget(vregView);
+
+    connect(formatCombo, &QComboBox::currentIndexChanged, this,
+            [this](int index)
+            {
+                switch (index)
+                {
+                case 1:
+                    m_vectorRegisterModel->setDisplayFormat(VectorDisplayFormat::UnsignedDecimal);
+                    break;
+                case 2:
+                    m_vectorRegisterModel->setDisplayFormat(VectorDisplayFormat::SignedDecimal);
+                    break;
+                default:
+                    m_vectorRegisterModel->setDisplayFormat(VectorDisplayFormat::Hexadecimal);
+                    break;
+                }
+            });
+
+    vregSection->setContentWidget(vregBody);
+    vregSection->setExpanded(false, /*animate=*/false);
+    sectionsLayout->addWidget(vregSection);
+
+    // --- Vector CSRs: read-only list -------------------------------------------------------
+    auto *csrSection = new CollapsibleSection("Vector CSRs", ui->sectionsContainer);
+    auto *csrView = new QTableView(csrSection);
+    csrView->setModel(m_vectorCsrModel);
+    csrView->verticalHeader()->setVisible(false);
+    csrView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    csrView->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    csrView->setMinimumHeight(csrView->horizontalHeader()->sizeHint().height() +
+                              VectorCsrModel::RowCount * csrView->verticalHeader()->defaultSectionSize() +
+                              2 * csrView->frameWidth());
+    csrSection->setContentWidget(csrView);
+    csrSection->setExpanded(false, /*animate=*/false);
+    sectionsLayout->addWidget(csrSection);
 }
 
 void RegisterContainer::setRegisterFile(RegisterFile *regfile)
 {
     m_registerModel->changeRegisterFile(regfile);
+    m_vectorRegisterModel->changeRegisterFile(regfile);
+    m_vectorCsrModel->changeRegisterFile(regfile);
 }
 
 RegisterContainer::~RegisterContainer()

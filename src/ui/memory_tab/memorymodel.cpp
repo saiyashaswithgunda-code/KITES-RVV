@@ -1,5 +1,7 @@
 #include "memorymodel.h"
 #include "config/config.h"
+#include <QBrush>
+#include <QColor>
 #include <QDebug>
 #include <algorithm>
 #include <cstdint>
@@ -65,6 +67,8 @@ void MemoryModel::setDisplayBase(Base base)
 void MemoryModel::changeMemoryController(MemoryController *memoryController)
 {
     beginResetModel();
+    m_modifiedBytes.clear();
+    m_stepHadWrites = false;
     m_memoryController = memoryController;
     // the previous connection will be invalid now
     // and since previous vm as destroyed the connection auto disconnects
@@ -158,6 +162,25 @@ QVariant MemoryModel::data(const QModelIndex &index, int role) const
         return Qt::AlignCenter;
     }
 
+    if (role == Qt::BackgroundRole)
+    {
+        // Highlight bytes modified by the latest step; the double-word cell is highlighted
+        // when any byte of its row changed.
+        uint64_t rowAddress = 0;
+        if (m_modifiedBytes.empty() || index.column() < 1 || !rowBaseAddress(index.row(), rowAddress))
+            return QVariant();
+        if (index.column() == 1)
+        {
+            for (uint64_t offset = 0; offset < 8; ++offset)
+                if (m_modifiedBytes.count(rowAddress + offset))
+                    return QBrush(QColor("#b13232fd"));
+            return QVariant();
+        }
+        if (m_modifiedBytes.count(rowAddress + static_cast<uint64_t>(index.column() - 2)))
+            return QBrush(QColor("#b13232fd"));
+        return QVariant();
+    }
+
     if (role == Qt::DisplayRole || role == Qt::ToolTipRole)
     {
         int offsetAddress = ((((m_rowsVisible * 8) / 2) / 8) * 8) - (index.row() * 8);
@@ -224,30 +247,80 @@ QVariant MemoryModel::data(const QModelIndex &index, int role) const
     return QVariant();
 }
 
+bool MemoryModel::rowBaseAddress(int row, uint64_t &address) const
+{
+    // Same mapping as data(): the central address sits at the middle row and rows above it
+    // (smaller row numbers) are higher addresses.
+    const int offsetAddress = ((((m_rowsVisible * 8) / 2) / 8) * 8) - (row * 8);
+    if (offsetAddress < 0 && static_cast<uint64_t>(-offsetAddress) > m_currentCentralAddress)
+        return false;
+    address = m_currentCentralAddress + offsetAddress;
+    const uint64_t memorySize = vm_config::config.getMemorySize();
+    return memorySize >= 8 && address <= memorySize - 8;
+}
+
+int MemoryModel::visibleRowForAddress(uint64_t address) const
+{
+    const int64_t topAddr =
+        static_cast<int64_t>(m_currentCentralAddress) + static_cast<int64_t>(m_rowsVisible / 2) * 8;
+    // Rows are 8-byte aligned, so any byte of a row maps to that row's base address.
+    const int64_t bytesFromTop = topAddr - static_cast<int64_t>(address & ~uint64_t{7});
+    if (bytesFromTop < 0)
+        return -1;
+    const int row = static_cast<int>(bytesFromTop / 8);
+    return row < m_rowsVisible ? row : -1;
+}
+
+void MemoryModel::emitRowChanged(int row)
+{
+    if (row < 0 || row >= m_rowsVisible)
+        return;
+    emit dataChanged(index(row, 0), index(row, columnCount() - 1),
+                     {Qt::DisplayRole, Qt::ToolTipRole, Qt::BackgroundRole});
+}
+
+void MemoryModel::clearModifiedBytes()
+{
+    if (m_modifiedBytes.empty())
+        return;
+    const std::unordered_set<uint64_t> old = std::move(m_modifiedBytes);
+    m_modifiedBytes.clear();
+    for (const uint64_t address : old)
+        emitRowChanged(visibleRowForAddress(address));
+}
+
 void MemoryModel::memoryResetSlot()
 {
     beginResetModel();
+    m_modifiedBytes.clear();
+    m_stepHadWrites = false;
     endResetModel();
 }
 
 void MemoryModel::updateMemory(uint64_t address)
 {
+    // The first write of a step replaces the highlight left by the previous step.
+    if (!m_stepHadWrites)
+    {
+        clearModifiedBytes();
+        m_stepHadWrites = true;
+    }
+    m_modifiedBytes.insert(address);
 
-    int64_t topAddr =
-        static_cast<int64_t>(m_currentCentralAddress) + static_cast<int64_t>(m_rowsVisible / 2) * 8;
-    int64_t bytesFromTop = topAddr - static_cast<int64_t>(address);
+    // Only the row containing the written byte needs refreshing (if it is on screen).
+    emitRowChanged(visibleRowForAddress(address));
+}
 
-    // address not in the visible window? nothing to update
-    if (bytesFromTop < 0)
-        return;
+void MemoryModel::stepFinished()
+{
+    if (!m_stepHadWrites)
+        clearModifiedBytes();
+    m_stepHadWrites = false;
+}
 
-    int row = static_cast<int>(bytesFromTop / 8);
-    if (row < 0 || row >= m_rowsVisible)
-        return;
-
-    QModelIndex topLeft = index(row, 0);
-    QModelIndex bottomRight = index(row, columnCount() - 1);
-
-    emit dataChanged(topLeft, bottomRight, {Qt::DisplayRole, Qt::ToolTipRole});
+void MemoryModel::clearHighlight()
+{
+    clearModifiedBytes();
+    m_stepHadWrites = false;
 }
 } // namespace Kites

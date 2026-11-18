@@ -7,6 +7,7 @@
 #include "utils.h"
 #include "common/globals.h"
 #include "processor/registers.h"
+#include <iomanip>
 
 
 #include <algorithm>
@@ -271,22 +272,60 @@ void DumpRegisters(const std::filesystem::path &filename, RegisterFile &register
         }
         file << "\n";
     }
+    file << "    },\n";
+
+    // Dump vector registers
+    file << "    \"vector_registers\": {\n";
+
+    for (size_t i = 0; i < RegisterFile::NUM_VREG; ++i)
+    {
+        auto vector_register = register_file.ReadVreg(i);
+
+        file << "        \"v" << i << "\": \"0x";
+
+        // Print bytes in reverse order for conventional hexadecimal representation.
+        for (size_t byte = RegisterFile::VLEN_BYTES; byte-- > 0;)
+        {
+            file << std::hex << std::setw(2) << std::setfill('0')
+                << static_cast<unsigned int>(vector_register[byte]);
+        }
+
+        file << std::dec << "\"";
+
+        if (i != RegisterFile::NUM_VREG - 1)
+            file << ",";
+
+        file << "\n";
+    }
+
+    file << "    },\n";
+
+    // Dump vector control and status registers
+    file << "    \"vector_control_status_registers\": {\n";
+
+    const std::vector<std::pair<std::string, size_t>> vector_csrs = {
+        {"vstart", RegisterFile::CSR_VSTART},
+        {"vl",     RegisterFile::CSR_VL},
+        {"vtype",  RegisterFile::CSR_VTYPE},
+        {"vlenb",  RegisterFile::CSR_VLENB}
+    };
+
+    for (size_t i = 0; i < vector_csrs.size(); ++i)
+    {
+        file << "        \"" << vector_csrs[i].first << "\": \"0x"
+            << std::hex << std::setw(16) << std::setfill('0')
+            << register_file.ReadCsr(vector_csrs[i].second)
+            << std::dec << "\"";
+
+        if (i != vector_csrs.size() - 1)
+            file << ",";
+
+        file << "\n";
+    }
+
     file << "    }\n";
-    // file << "    },\n";
-
-    // file << "    \"vec_registers\": {\n";
-    // for (size_t i = 0; i < gp_registers.size(); ++i) {
-    //     file << "        \"x" << i << "\": \"0x"
-    //          << std::hex << std::setw(16) << std::setfill('0') << gp_registers[i] << std::setw(0)
-    //          << std::dec << "\"";
-    //     if (i != gp_registers.size() - 1) {
-    //         file << ",";
-    //     }
-    //     file << "\n";
-    // }
-    // file << "    }\n";
-
     file << "}\n";
+
 
     file.close();
 }

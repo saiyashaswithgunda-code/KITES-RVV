@@ -2,10 +2,13 @@
 #define REGISTERCONTAINER_H
 
 #include "registermodel.h"
+#include "vectorcsrmodel.h"
+#include "vectorregistermodel.h"
 #include <QWidget>
 #include <memory>
 
 class QSortFilterProxyModel;
+class QVBoxLayout;
 
 namespace Kites
 {
@@ -27,10 +30,13 @@ class RegisterContainer : public QWidget
     //     void updateRegisterValue(size_t regIndex, uint64_t value);
   private:
     void setupRegisterTable();
+    void setupVectorSections(QVBoxLayout *sectionsLayout);
     QSortFilterProxyModel *makeRangeProxy(int firstRow, int lastRowExclusive);
 
     Ui::RegisterContainer *ui;
     RegisterModel *m_registerModel;
+    VectorRegisterModel *m_vectorRegisterModel;
+    VectorCsrModel *m_vectorCsrModel;
 };
 } // namespace Kites
 #endif // REGISTERCONTAINER_H

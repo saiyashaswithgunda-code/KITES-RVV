@@ -647,11 +647,26 @@ bool Parser::parse_vsetvli()
     return true;
 }
 
+namespace
+{
+bool isVectorReductionMnemonic(const std::string &opcode)
+{
+    return opcode == "vredsum.vs"  ||
+           opcode == "vredmax.vs"  ||
+           opcode == "vredmaxu.vs" ||
+           opcode == "vredmin.vs"  ||
+           opcode == "vredminu.vs" ||
+           opcode == "vredand.vs"  ||
+           opcode == "vredor.vs"   ||
+           opcode == "vredxor.vs";
+}
+} // namespace
+
 bool Parser::parse_vector_vv()
 {
     const unsigned int line = currentToken().line_number;
 
-    // Validate: instruction vd, vs2, vs1
+    // Validate: instruction vd, vs2, vs1 [, v0.t]
     if (peekToken(1).line_number != line ||
         peekToken(1).type != TokenType::VEC_REGISTER ||
         peekToken(2).type != TokenType::COMMA ||
@@ -659,9 +674,7 @@ bool Parser::parse_vector_vv()
         peekToken(3).type != TokenType::VEC_REGISTER ||
         peekToken(4).type != TokenType::COMMA ||
         peekToken(5).line_number != line ||
-        peekToken(5).type != TokenType::VEC_REGISTER ||
-        (peekToken(6).type != TokenType::EOF_ &&
-         peekToken(6).line_number == line))
+        peekToken(5).type != TokenType::VEC_REGISTER)
     {
         return false;
     }
@@ -675,6 +688,76 @@ bool Parser::parse_vector_vv()
     block.setRd(peekToken(1).value);
     block.setRs2(peekToken(3).value);
     block.setRs1(peekToken(5).value);
+
+    // Check optional mask: , v0.t (only permitted for the 8 reduction instructions)
+    if (peekToken(6).type == TokenType::COMMA &&
+        peekToken(6).line_number == line)
+    {
+        if (!isVectorReductionMnemonic(block.getOpcode()) ||
+            peekToken(7).value != "v0.t" ||
+            peekToken(7).line_number != line ||
+            (peekToken(8).type != TokenType::EOF_ &&
+             peekToken(8).line_number == line))
+        {
+            return false;
+        }
+        block.setRs3("v0.t");
+    }
+    else if (peekToken(6).type != TokenType::EOF_ &&
+             peekToken(6).line_number == line)
+    {
+        return false;
+    }
+
+    skipCurrentLine();
+
+    intermediate_code_.emplace_back(block, true);
+    instruction_number_line_number_mapping_[instruction_index_] = line;
+    instruction_index_++;
+
+    return true;
+}
+
+bool Parser::parse_vector_v()
+{
+    const unsigned int line = currentToken().line_number;
+
+    // Validate: instruction vd, vs2 [, v0.t]
+    if (peekToken(1).line_number != line ||
+        peekToken(1).type != TokenType::VEC_REGISTER ||
+        peekToken(2).type != TokenType::COMMA ||
+        peekToken(3).line_number != line ||
+        peekToken(3).type != TokenType::VEC_REGISTER)
+    {
+        return false;
+    }
+
+    ICUnit block;
+    block.setOpcode(currentToken().value);
+    block.setLineNumber(line);
+    block.setInstructionIndex(instruction_index_);
+
+    block.setRd(peekToken(1).value);
+    block.setRs2(peekToken(3).value);
+
+    // Check optional mask: , v0.t
+    if (peekToken(4).type == TokenType::COMMA &&
+        peekToken(4).line_number == line)
+    {
+        if (peekToken(5).value != "v0.t" ||
+            peekToken(5).line_number != line ||
+            (peekToken(6).type != TokenType::EOF_ &&
+             peekToken(6).line_number == line))
+        {
+            return false;
+        }
+        block.setRs3("v0.t");
+    }
+    else if (peekToken(4).type != TokenType::EOF_ &&
+             peekToken(4).line_number == line)
+    {
+        return false;
+    }
 
     skipCurrentLine();
 
@@ -829,6 +912,65 @@ bool Parser::parse_vector_memory()
 
     // Convert the base register alias into its canonical name.
     block.setRs1(reg_alias_to_name.at(peekToken(4).value));
+
+    skipCurrentLine();
+
+    intermediate_code_.emplace_back(block, true);
+    instruction_number_line_number_mapping_[instruction_index_] = line;
+    instruction_index_++;
+
+    return true;
+}
+
+bool Parser::parse_vector_strided_memory()
+{
+    const unsigned int line = currentToken().line_number;
+
+    // Validate: instruction vd/vs3, (rs1), rs2 [, v0.t]
+    if (peekToken(1).line_number != line ||
+        peekToken(1).type != TokenType::VEC_REGISTER ||
+        peekToken(2).type != TokenType::COMMA ||
+        peekToken(3).type != TokenType::LPAREN ||
+        peekToken(4).line_number != line ||
+        peekToken(4).type != TokenType::GP_REGISTER ||
+        peekToken(5).type != TokenType::RPAREN ||
+        peekToken(6).type != TokenType::COMMA ||
+        peekToken(7).line_number != line ||
+        peekToken(7).type != TokenType::GP_REGISTER)
+    {
+        return false;
+    }
+
+    ICUnit block;
+    block.setOpcode(currentToken().value);
+    block.setLineNumber(line);
+    block.setInstructionIndex(instruction_index_);
+
+    // The vector register is vd for loads and vs3 for stores.
+    block.setRd(peekToken(1).value);
+
+    // Convert the base and stride register aliases into canonical names.
+    block.setRs1(reg_alias_to_name.at(peekToken(4).value));
+    block.setRs2(reg_alias_to_name.at(peekToken(7).value));
+
+    // Optional mask operand: , v0.t
+    if (peekToken(8).type == TokenType::COMMA &&
+        peekToken(8).line_number == line)
+    {
+        if (peekToken(9).value != "v0.t" ||
+            peekToken(9).line_number != line ||
+            (peekToken(10).type != TokenType::EOF_ &&
+             peekToken(10).line_number == line))
+        {
+            return false;
+        }
+        block.setRs3("v0.t");
+    }
+    else if (peekToken(8).type != TokenType::EOF_ &&
+             peekToken(8).line_number == line)
+    {
+        return false;
+    }
 
     skipCurrentLine();
 

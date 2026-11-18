@@ -62,6 +62,10 @@ class RVSSProcessor : public ProcessorBase
     bool vector_mem_load_{};
     bool vector_mem_pending_{};
 
+    bool vector_mem_is_stride_{};
+    int64_t vector_mem_stride_{};
+    bool vector_mem_is_mask_{};
+
     uint8_t vector_mem_vm_{1};
     bool vector_mem_tail_agnostic_{};
     bool vector_mem_mask_agnostic_{};
@@ -99,6 +103,8 @@ class RVSSProcessor : public ProcessorBase
     void ExecuteCsr();
     void ExecuteVsetvli();
     void ExecuteVectorArithmetic();
+    void ExecuteVectorMaskLogical();
+    void ExecuteVectorMaskPrefix();
     void HandleSyscall();
 
     void WriteMemory();

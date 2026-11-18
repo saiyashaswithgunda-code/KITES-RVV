@@ -20,6 +20,11 @@ class MemoryTab : public KitesTab
     void changeMemoryController(MemoryController *memoryController);
     ~MemoryTab();
 
+  public slots:
+    // Called after every step/undo/redo and when a program is loaded; see MemoryModel.
+    void onStepFinished();
+    void onProgramLoaded();
+
   private:
     Ui::MemoryTab *ui;
     MemoryModel *m_memoryModel = nullptr;

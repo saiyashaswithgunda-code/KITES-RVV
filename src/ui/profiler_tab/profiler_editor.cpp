@@ -146,6 +146,8 @@ void ProfilerEditor::updateLineInstructionTypeSlot
     {
         int lineNumber = pair.first;
         instruction_set::InstructionType instrType = pair.second;
+        if (toIndex(instrType) >= instruction_set::instructionTypeNames.size())
+            continue; // UNKNOWN has no name entry
         m_lineNumberToInstructionType[lineNumber] = 
         instruction_set::instructionTypeNames[toIndex(instrType)];
     }

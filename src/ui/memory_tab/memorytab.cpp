@@ -71,6 +71,16 @@ void MemoryTab::changeMemoryController(MemoryController *memoryController)
     m_memoryModel->changeMemoryController(memoryController);
 }
 
+void MemoryTab::onStepFinished()
+{
+    m_memoryModel->stepFinished();
+}
+
+void MemoryTab::onProgramLoaded()
+{
+    m_memoryModel->clearHighlight();
+}
+
 MemoryTab::~MemoryTab()
 {
     delete ui;

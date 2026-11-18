@@ -186,6 +186,10 @@ class RegisterFile : public QObject
   signals:
     void updateRegister(size_t regIndex, uint64_t value);
     void updateFRegister(size_t regIndex, uint64_t value);
+    /// Emitted after a vector register (v0-v31) has been written (execution, undo and redo).
+    void updateVRegister(size_t regIndex);
+    /// Emitted after a vector CSR (vstart, vl, vtype or vlenb) has been written.
+    void vectorCsrChanged();
     void registerResetSignal();
 };
 

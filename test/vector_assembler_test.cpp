@@ -6,6 +6,7 @@
 #include <string>
 
 #include "assembler/assembler.h"
+#include "assembler/code_generator.h"
 #include "utils/utils.h"
 
 namespace
@@ -779,3 +780,434 @@ TEST(VectorAssemblerTest, RejectsNonExistentDivisionImmediate)
     std::istringstream stream_vremu_vi("vremu.vi v1, v2, 3\n");
     EXPECT_THROW(Kites::assemble(stream_vremu_vi), std::runtime_error);
 }
+
+TEST(VectorAssemblerTest, EncodesAllVectorComparisonVVCorrectly)
+{
+    // funct3 = 000 (OPIVV)
+    // vmseq.vv  -> funct6 = 011000 (0x18)
+    EXPECT_EQ(assembleVectorVV("vmseq.vv v1, v2, v3\n"), 0x622180D7u);
+
+    // vmsne.vv  -> funct6 = 011001 (0x19)
+    EXPECT_EQ(assembleVectorVV("vmsne.vv v1, v2, v3\n"), 0x662180D7u);
+
+    // vmsltu.vv -> funct6 = 011010 (0x1A)
+    EXPECT_EQ(assembleVectorVV("vmsltu.vv v1, v2, v3\n"), 0x6A2180D7u);
+
+    // vmslt.vv  -> funct6 = 011011 (0x1B)
+    EXPECT_EQ(assembleVectorVV("vmslt.vv v1, v2, v3\n"), 0x6E2180D7u);
+
+    // vmsleu.vv -> funct6 = 011100 (0x1C)
+    EXPECT_EQ(assembleVectorVV("vmsleu.vv v1, v2, v3\n"), 0x722180D7u);
+
+    // vmsle.vv  -> funct6 = 011101 (0x1D)
+    EXPECT_EQ(assembleVectorVV("vmsle.vv v1, v2, v3\n"), 0x762180D7u);
+}
+
+TEST(VectorAssemblerTest, EncodesAllVectorComparisonVXCorrectly)
+{
+    // funct3 = 100 (OPIVX)
+    // vmseq.vx  -> funct6 = 011000 (0x18)
+    EXPECT_EQ(assembleVectorVX("vmseq.vx v1, v2, x3\n"), 0x6221C0D7u);
+
+    // vmsne.vx  -> funct6 = 011001 (0x19)
+    EXPECT_EQ(assembleVectorVX("vmsne.vx v1, v2, x3\n"), 0x6621C0D7u);
+
+    // vmsltu.vx -> funct6 = 011010 (0x1A)
+    EXPECT_EQ(assembleVectorVX("vmsltu.vx v1, v2, x3\n"), 0x6A21C0D7u);
+
+    // vmslt.vx  -> funct6 = 011011 (0x1B)
+    EXPECT_EQ(assembleVectorVX("vmslt.vx v1, v2, x3\n"), 0x6E21C0D7u);
+
+    // vmsleu.vx -> funct6 = 011100 (0x1C)
+    EXPECT_EQ(assembleVectorVX("vmsleu.vx v1, v2, x3\n"), 0x7221C0D7u);
+
+    // vmsle.vx  -> funct6 = 011101 (0x1D)
+    EXPECT_EQ(assembleVectorVX("vmsle.vx v1, v2, x3\n"), 0x7621C0D7u);
+
+    // vmsgtu.vx -> funct6 = 011110 (0x1E)
+    EXPECT_EQ(assembleVectorVX("vmsgtu.vx v1, v2, x3\n"), 0x7A21C0D7u);
+
+    // vmsgt.vx  -> funct6 = 011111 (0x1F)
+    EXPECT_EQ(assembleVectorVX("vmsgt.vx v1, v2, x3\n"), 0x7E21C0D7u);
+}
+
+TEST(VectorAssemblerTest, EncodesAllVectorMaskLogicalCorrectly)
+{
+    // funct3 = 010 (OPMVV), vm = 1
+    // vmandn.mm -> funct6 = 011000 (0x18)
+    EXPECT_EQ(assembleVectorVV("vmandn.mm v1, v2, v3\n"), 0x6221A0D7u);
+
+    // vmand.mm  -> funct6 = 011001 (0x19)
+    EXPECT_EQ(assembleVectorVV("vmand.mm v1, v2, v3\n"), 0x6621A0D7u);
+
+    // vmor.mm   -> funct6 = 011010 (0x1A)
+    EXPECT_EQ(assembleVectorVV("vmor.mm v1, v2, v3\n"), 0x6A21A0D7u);
+
+    // vmxor.mm  -> funct6 = 011011 (0x1B)
+    EXPECT_EQ(assembleVectorVV("vmxor.mm v1, v2, v3\n"), 0x6E21A0D7u);
+
+    // vmorn.mm  -> funct6 = 011100 (0x1C)
+    EXPECT_EQ(assembleVectorVV("vmorn.mm v1, v2, v3\n"), 0x7221A0D7u);
+}
+
+TEST(VectorAssemblerTest, EncodesAllVectorMaskPrefixCorrectly)
+{
+    // funct6 = 010100 (0x14), funct3 = 010 (OPMVV)
+    // Unmasked (vm = 1):
+    // vmsbf.m -> vs1 = 00001 (1)
+    EXPECT_EQ(assembleVectorVV("vmsbf.m v1, v2\n"), 0x5220A0D7u);
+
+    // vmsof.m -> vs1 = 00010 (2)
+    EXPECT_EQ(assembleVectorVV("vmsof.m v1, v2\n"), 0x522120D7u);
+
+    // vmsif.m -> vs1 = 00011 (3)
+    EXPECT_EQ(assembleVectorVV("vmsif.m v1, v2\n"), 0x5221A0D7u);
+
+    // Masked with v0.t (vm = 0):
+    EXPECT_EQ(assembleVectorVV("vmsbf.m v1, v2, v0.t\n"), 0x5020A0D7u);
+    EXPECT_EQ(assembleVectorVV("vmsof.m v1, v2, v0.t\n"), 0x502120D7u);
+    EXPECT_EQ(assembleVectorVV("vmsif.m v1, v2, v0.t\n"), 0x5021A0D7u);
+}
+
+TEST(VectorAssemblerTest, DistinctMachineCodesBetweenComparisonAndMaskLogical)
+{
+    // Verify that comparisons (OPIVV, funct3=000) and mask-logical (OPMVV, funct3=010)
+    // sharing the same funct6 produce distinct 32-bit machine codes.
+    const uint32_t vmseq_code = assembleVectorVV("vmseq.vv v1, v2, v3\n");
+    const uint32_t vmandn_code = assembleVectorVV("vmandn.mm v1, v2, v3\n");
+    EXPECT_NE(vmseq_code, vmandn_code);
+    EXPECT_EQ(vmseq_code, 0x622180D7u);
+    EXPECT_EQ(vmandn_code, 0x6221A0D7u);
+    // Bit 13 distinguishes funct3 = 0b000 from 0b010
+    EXPECT_EQ((vmseq_code >> 12) & 0b111, 0b000u);
+    EXPECT_EQ((vmandn_code >> 12) & 0b111, 0b010u);
+}
+
+TEST(VectorAssemblerTest, EncodesAllVectorComparisonVICorrectly)
+{
+    // funct3 = 011 (OPIVI)
+    // vmseq.vi  -> funct6 = 011000 (0x18), simm5 = 3
+    EXPECT_EQ(assembleVectorVI("vmseq.vi v1, v2, 3\n"), 0x6221B0D7u);
+
+    // vmsne.vi  -> funct6 = 011001 (0x19), simm5 = 3
+    EXPECT_EQ(assembleVectorVI("vmsne.vi v1, v2, 3\n"), 0x6621B0D7u);
+
+    // vmsleu.vi -> funct6 = 011100 (0x1C), simm5 = 3
+    EXPECT_EQ(assembleVectorVI("vmsleu.vi v1, v2, 3\n"), 0x7221B0D7u);
+
+    // vmsle.vi  -> funct6 = 011101 (0x1D), simm5 = 3
+    EXPECT_EQ(assembleVectorVI("vmsle.vi v1, v2, 3\n"), 0x7621B0D7u);
+
+    // vmsgtu.vi -> funct6 = 011110 (0x1E), simm5 = 3
+    EXPECT_EQ(assembleVectorVI("vmsgtu.vi v1, v2, 3\n"), 0x7A21B0D7u);
+
+    // vmsgt.vi  -> funct6 = 011111 (0x1F), simm5 = 3
+    EXPECT_EQ(assembleVectorVI("vmsgt.vi v1, v2, 3\n"), 0x7E21B0D7u);
+
+    // Negative immediate tests:
+    // vmseq.vi with simm5 = -1 (0x1F)
+    EXPECT_EQ(assembleVectorVI("vmseq.vi v1, v2, -1\n"), 0x622FB0D7u);
+
+    // vmsle.vi with simm5 = -16 (0x10)
+    EXPECT_EQ(assembleVectorVI("vmsle.vi v1, v2, -16\n"), 0x762830D7u);
+}
+
+TEST(VectorAssemblerTest, RejectsUnsupportedComparisonForms)
+{
+    Kites::setupVmStateDirectory();
+
+    // vmslt.vi and vmsltu.vi do not exist in RVV 1.0 (synthesized via vmsle[u].vi)
+    std::istringstream stream_vmslt_vi("vmslt.vi v1, v2, 3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmslt_vi), std::runtime_error);
+
+    std::istringstream stream_vmsltu_vi("vmsltu.vi v1, v2, 3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmsltu_vi), std::runtime_error);
+
+    // vmsgt.vv and vmsgtu.vv do not exist in RVV 1.0 (synthesized via vmslt[u].vv with swapped operands)
+    std::istringstream stream_vmsgt_vv("vmsgt.vv v1, v2, v3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmsgt_vv), std::runtime_error);
+
+    std::istringstream stream_vmsgtu_vv("vmsgtu.vv v1, v2, v3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmsgtu_vv), std::runtime_error);
+}
+
+TEST(VectorAssemblerTest, RejectsUnsupportedMaskLogicalAndPrefixForms)
+{
+    Kites::setupVmStateDirectory();
+
+    // Mask logical instructions only support .mm form (no .vx, .vi, or scalar)
+    std::istringstream stream_vmand_vx("vmand.vx v1, v2, x3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmand_vx), std::runtime_error);
+
+    std::istringstream stream_vmand_vi("vmand.vi v1, v2, 3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmand_vi), std::runtime_error);
+
+    std::istringstream stream_vmandn_vx("vmandn.vx v1, v2, x3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmandn_vx), std::runtime_error);
+
+    std::istringstream stream_vmor_vi("vmor.vi v1, v2, 3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmor_vi), std::runtime_error);
+
+    // Prefix instructions only support .m form (no .vv, .vx, .vi)
+    std::istringstream stream_vmsbf_vv("vmsbf.vv v1, v2, v3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmsbf_vv), std::runtime_error);
+
+    std::istringstream stream_vmsof_vx("vmsof.vx v1, v2, x3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmsof_vx), std::runtime_error);
+
+    std::istringstream stream_vmsif_vi("vmsif.vi v1, v2, 3\n");
+    EXPECT_THROW(Kites::assemble(stream_vmsif_vi), std::runtime_error);
+
+    // Invalid mask operand (only v0.t is allowed as third operand)
+    std::istringstream stream_vmsbf_bad_mask("vmsbf.m v1, v2, v1.t\n");
+    EXPECT_THROW(Kites::assemble(stream_vmsbf_bad_mask), std::runtime_error);
+}
+
+TEST(VectorAssemblerTest, EncodesAllVectorStridedMemoryInstructions)
+{
+    struct TestCase
+    {
+        const char *instruction;
+        uint32_t expected;
+    };
+
+    // mop=10 (bits 27:26), vm=1 (bit 25), rs2=x11 (bits 24:20), rs1=x10 (bits 19:15), vd/vs3=v3 (bits 11:7)
+    // vlse: opcode = 0x07
+    // vsse: opcode = 0x27
+    const TestCase cases[] = {
+        {"vlse8.v v3, (x10), x11",  0x0AB50187u},
+        {"vlse16.v v3, (x10), x11", 0x0AB55187u},
+        {"vlse32.v v3, (x10), x11", 0x0AB56187u},
+        {"vlse64.v v3, (x10), x11", 0x0AB57187u},
+
+        {"vsse8.v v3, (x10), x11",  0x0AB501A7u},
+        {"vsse16.v v3, (x10), x11", 0x0AB551A7u},
+        {"vsse32.v v3, (x10), x11", 0x0AB561A7u},
+        {"vsse64.v v3, (x10), x11", 0x0AB571A7u}
+    };
+
+    for (const auto &testCase : cases)
+    {
+        SCOPED_TRACE(testCase.instruction);
+
+        std::string source = std::string(testCase.instruction) + "\n";
+        EXPECT_EQ(assembleVectorMemory(source), testCase.expected);
+    }
+}
+
+TEST(VectorAssemblerTest, EncodesMaskedVectorStridedMemoryInstructions)
+{
+    // Masked with v0.t (vm = 0, bit 25 = 0)
+    EXPECT_EQ(
+        assembleVectorMemory("vlse32.v v3, (x10), x11, v0.t\n"),
+        0x08B56187u
+    );
+
+    EXPECT_EQ(
+        assembleVectorMemory("vsse32.v v3, (x10), x11, v0.t\n"),
+        0x08B561A7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVectorStridedMemoryRegistersCorrectly)
+{
+    // vlse8.v v17, (x5), x6
+    // vm = 1, mop = 10, rs2 = x6 (6), rs1 = x5 (5), funct3 = 000, vd = v17 (17), opcode = 0x07
+    // (2 << 26) | (1 << 25) | (6 << 20) | (5 << 15) | (0 << 12) | (17 << 7) | 0x07
+    // = 0x0A000000 | 0x00600000 | 0x00028000 | 0x00000880 | 0x07 = 0x0A628887u
+    EXPECT_EQ(
+        assembleVectorMemory("vlse8.v v17, (x5), x6\n"),
+        0x0A628887u
+    );
+
+    // vsse8.v v17, (x5), x6
+    // opcode = 0x27 -> 0x0A6288A7u
+    EXPECT_EQ(
+        assembleVectorMemory("vsse8.v v17, (x5), x6\n"),
+        0x0A6288A7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVectorMaskMemoryInstructions)
+{
+    // vlm.v vd, (rs1)
+    // mop = 00, vm = 1, lumop = 01011 (11), rs1 = x10 (10), funct3 = 000, vd = v3 (3), opcode = 0x07
+    // (1 << 25) | (11 << 20) | (10 << 15) | (3 << 7) | 0x07 = 0x02B50187u
+    EXPECT_EQ(
+        assembleVectorMemory("vlm.v v3, (x10)\n"),
+        0x02B50187u
+    );
+
+    // vsm.v vs3, (rs1)
+    // opcode = 0x27 -> 0x02B501A7u
+    EXPECT_EQ(
+        assembleVectorMemory("vsm.v v3, (x10)\n"),
+        0x02B501A7u
+    );
+}
+
+TEST(VectorAssemblerTest, ReconstructsDisassemblyForStridedAndMaskMemory)
+{
+    Kites::setupVmStateDirectory();
+
+    const std::string source =
+        "vlse32.v v3, (x10), x11\n"
+        "vlse32.v v3, (x10), x11, v0.t\n"
+        "vsse32.v v3, (x10), x11\n"
+        "vlm.v v1, (x10)\n"
+        "vsm.v v1, (x10)\n";
+
+    std::istringstream stream(source);
+    Kites::AssembledProgram program = Kites::assemble(stream);
+
+    auto disassembled = Kites::printIntermediateCode(program.intermediate_code);
+    ASSERT_EQ(disassembled.size(), 5u);
+
+    EXPECT_EQ(disassembled[0], "vlse32.v v3, (x10), x11");
+    EXPECT_EQ(disassembled[1], "vlse32.v v3, (x10), x11, v0.t");
+    EXPECT_EQ(disassembled[2], "vsse32.v v3, (x10), x11");
+    EXPECT_EQ(disassembled[3], "vlm.v v1, (x10)");
+    EXPECT_EQ(disassembled[4], "vsm.v v1, (x10)");
+}
+
+TEST(VectorAssemblerTest, RejectsInvalidVectorStridedAndMaskMemorySyntax)
+{
+    Kites::setupVmStateDirectory();
+
+    // Missing stride operand
+    std::istringstream stream_missing_stride("vlse32.v v1, (x10)\n");
+    EXPECT_THROW(Kites::assemble(stream_missing_stride), std::runtime_error);
+
+    // Extra operand
+    std::istringstream stream_extra("vlse32.v v1, (x10), x11, x12\n");
+    EXPECT_THROW(Kites::assemble(stream_extra), std::runtime_error);
+
+    // Invalid mask operand (only v0.t is allowed)
+    std::istringstream stream_bad_mask("vlse32.v v1, (x10), x11, v1.t\n");
+    EXPECT_THROW(Kites::assemble(stream_bad_mask), std::runtime_error);
+
+    // Mask memory cannot have a mask operand
+    std::istringstream stream_vlm_masked("vlm.v v1, (x10), v0.t\n");
+    EXPECT_THROW(Kites::assemble(stream_vlm_masked), std::runtime_error);
+
+    std::istringstream stream_vsm_masked("vsm.v v1, (x10), v0.t\n");
+    EXPECT_THROW(Kites::assemble(stream_vsm_masked), std::runtime_error);
+}
+
+TEST(VectorAssemblerTest, EncodesAllVectorReductionInstructionsUnmasked)
+{
+    // vd = v4 (4), vs2 = v2 (2), vs1 = v3 (3), vm = 1, funct3 = 010, opcode = 0x57
+    EXPECT_EQ(assembleVectorReduction("vredsum.vs v4, v2, v3\n"),  0x0221A257u);
+    EXPECT_EQ(assembleVectorReduction("vredand.vs v4, v2, v3\n"),  0x0621A257u);
+    EXPECT_EQ(assembleVectorReduction("vredor.vs v4, v2, v3\n"),   0x0A21A257u);
+    EXPECT_EQ(assembleVectorReduction("vredxor.vs v4, v2, v3\n"),  0x0E21A257u);
+    EXPECT_EQ(assembleVectorReduction("vredminu.vs v4, v2, v3\n"), 0x1221A257u);
+    EXPECT_EQ(assembleVectorReduction("vredmin.vs v4, v2, v3\n"),  0x1621A257u);
+    EXPECT_EQ(assembleVectorReduction("vredmaxu.vs v4, v2, v3\n"), 0x1A21A257u);
+    EXPECT_EQ(assembleVectorReduction("vredmax.vs v4, v2, v3\n"),  0x1E21A257u);
+}
+
+TEST(VectorAssemblerTest, EncodesAllVectorReductionInstructionsMasked)
+{
+    // vd = v4 (4), vs2 = v2 (2), vs1 = v3 (3), vm = 0 (v0.t), funct3 = 010, opcode = 0x57
+    EXPECT_EQ(assembleVectorReduction("vredsum.vs v4, v2, v3, v0.t\n"),  0x0021A257u);
+    EXPECT_EQ(assembleVectorReduction("vredand.vs v4, v2, v3, v0.t\n"),  0x0421A257u);
+    EXPECT_EQ(assembleVectorReduction("vredor.vs v4, v2, v3, v0.t\n"),   0x0821A257u);
+    EXPECT_EQ(assembleVectorReduction("vredxor.vs v4, v2, v3, v0.t\n"),  0x0C21A257u);
+    EXPECT_EQ(assembleVectorReduction("vredminu.vs v4, v2, v3, v0.t\n"), 0x1021A257u);
+    EXPECT_EQ(assembleVectorReduction("vredmin.vs v4, v2, v3, v0.t\n"),  0x1421A257u);
+    EXPECT_EQ(assembleVectorReduction("vredmaxu.vs v4, v2, v3, v0.t\n"), 0x1821A257u);
+    EXPECT_EQ(assembleVectorReduction("vredmax.vs v4, v2, v3, v0.t\n"),  0x1C21A257u);
+}
+
+TEST(VectorAssemblerTest, EncodesVectorReductionZeroRegisters)
+{
+    EXPECT_EQ(assembleVectorReduction("vredsum.vs v0, v0, v0\n"),  0x02002057u);
+    EXPECT_EQ(assembleVectorReduction("vredmin.vs v0, v0, v0\n"),  0x16002057u);
+    EXPECT_EQ(assembleVectorReduction("vredmax.vs v0, v0, v0\n"),  0x1E002057u);
+    EXPECT_EQ(assembleVectorReduction("vredsum.vs v0, v0, v0, v0.t\n"), 0x00002057u);
+    EXPECT_EQ(assembleVectorReduction("vredmin.vs v0, v0, v0, v0.t\n"), 0x14002057u);
+    EXPECT_EQ(assembleVectorReduction("vredmax.vs v0, v0, v0, v0.t\n"), 0x1C002057u);
+}
+
+TEST(VectorAssemblerTest, ReconstructsDisassemblyForVectorReduction)
+{
+    Kites::setupVmStateDirectory();
+
+    const std::string source =
+        "vredmax.vs v4, v2, v3\n"
+        "vredmax.vs v4, v2, v3, v0.t\n"
+        "vredmin.vs v1, v5, v6\n"
+        "vredmin.vs v1, v5, v6, v0.t\n"
+        "vredand.vs v7, v8, v9\n"
+        "vredor.vs v10, v11, v12\n"
+        "vredxor.vs v13, v14, v15\n";
+
+    std::istringstream stream(source);
+    Kites::AssembledProgram program = Kites::assemble(stream);
+
+    auto disassembled = Kites::printIntermediateCode(program.intermediate_code);
+    ASSERT_EQ(disassembled.size(), 7u);
+
+    EXPECT_EQ(disassembled[0], "vredmax.vs v4, v2, v3");
+    EXPECT_EQ(disassembled[1], "vredmax.vs v4, v2, v3, v0.t");
+    EXPECT_EQ(disassembled[2], "vredmin.vs v1, v5, v6");
+    EXPECT_EQ(disassembled[3], "vredmin.vs v1, v5, v6, v0.t");
+    EXPECT_EQ(disassembled[4], "vredand.vs v7, v8, v9");
+    EXPECT_EQ(disassembled[5], "vredor.vs v10, v11, v12");
+    EXPECT_EQ(disassembled[6], "vredxor.vs v13, v14, v15");
+}
+
+TEST(VectorAssemblerTest, RejectsInvalidVectorReductionSyntax)
+{
+    Kites::setupVmStateDirectory();
+
+    // Scalar register in place of vector register
+    std::istringstream s1("vredmax.vs x1, v2, v3\n");
+    EXPECT_THROW(Kites::assemble(s1), std::runtime_error);
+
+    std::istringstream s2("vredmax.vs v1, x2, v3\n");
+    EXPECT_THROW(Kites::assemble(s2), std::runtime_error);
+
+    std::istringstream s3("vredmax.vs v1, v2, x3\n");
+    EXPECT_THROW(Kites::assemble(s3), std::runtime_error);
+
+    // Too few operands
+    std::istringstream s4("vredmax.vs v1, v2\n");
+    EXPECT_THROW(Kites::assemble(s4), std::runtime_error);
+
+    // Invalid mask register (only v0.t is allowed)
+    std::istringstream s5("vredmax.vs v1, v2, v3, v1.t\n");
+    EXPECT_THROW(Kites::assemble(s5), std::runtime_error);
+
+    std::istringstream s6("vredmax.vs v1, v2, v3, v0\n");
+    EXPECT_THROW(Kites::assemble(s6), std::runtime_error);
+
+    // Extra trailing tokens
+    std::istringstream s7("vredmax.vs v1, v2, v3, v0.t, v4\n");
+    EXPECT_THROW(Kites::assemble(s7), std::runtime_error);
+}
+
+TEST(VectorAssemblerTest, RejectsMaskedSyntaxForNonReductionInstructions)
+{
+    Kites::setupVmStateDirectory();
+
+    // vadd.vv with mask operand must be rejected
+    std::istringstream s1("vadd.vv v1, v2, v3, v0.t\n");
+    EXPECT_THROW(Kites::assemble(s1), std::runtime_error);
+
+    // vmseq.vv with mask operand must be rejected
+    std::istringstream s2("vmseq.vv v0, v1, v2, v0.t\n");
+    EXPECT_THROW(Kites::assemble(s2), std::runtime_error);
+
+    // Additional non-reduction vv instructions with mask operand must also be rejected
+    std::istringstream s3("vsub.vv v1, v2, v3, v0.t\n");
+    EXPECT_THROW(Kites::assemble(s3), std::runtime_error);
+
+    std::istringstream s4("vmul.vv v1, v2, v3, v0.t\n");
+    EXPECT_THROW(Kites::assemble(s4), std::runtime_error);
+
+    std::istringstream s5("vdiv.vv v1, v2, v3, v0.t\n");
+    EXPECT_THROW(Kites::assemble(s5), std::runtime_error);
+}
+
