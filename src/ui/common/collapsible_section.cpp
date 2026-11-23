@@ -89,11 +89,14 @@ void CollapsibleSection::setExpanded(bool expanded, bool animate)
     m_headerButton->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
 
     const int targetHeight = expanded && m_contentWidget ? m_contentWidget->sizeHint().height() : 0;
+    const int currentHeight = m_bodyWidget->height();
 
     m_animation->stop();
+    m_bodyWidget->setMaximumHeight(currentHeight);
+
     auto *heightAnimation = qobject_cast<QPropertyAnimation *>(m_animation->animationAt(0));
     heightAnimation->setDuration(animate ? animationDurationMs : 0);
-    heightAnimation->setStartValue(m_bodyWidget->maximumHeight());
+    heightAnimation->setStartValue(currentHeight);
     heightAnimation->setEndValue(targetHeight);
     m_animation->start();
 }

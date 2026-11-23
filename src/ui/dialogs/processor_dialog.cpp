@@ -22,27 +22,31 @@ void ProcessorDialog::on_buttonBox_accepted()
     if (selectedItem)
     {
         m_currentSelectedItem = selectedItem;
+        int index = ui->treeWidget->indexOfTopLevelItem(selectedItem);
+        if (index >= 0 && index < static_cast<int>(ProcessorType::ProcessorTypeCount))
+        {
+            emit vmSelected(static_cast<ProcessorType>(index));
+            return;
+        }
+
         QString processorType = selectedItem->text(0);
-        // all these names were set in processor_dialog.ui using qt Designer
-        if (processorType == "Single cycle processor")
+        if (processorType.startsWith("Single cycle", Qt::CaseInsensitive))
         {
             emit vmSelected(ProcessorType::RVSS);
         }
-        else if (processorType == "5 statge Processor w/o hazard detection w/o forwarding")
+        else if (processorType.contains("w/o forwarding", Qt::CaseInsensitive))
         {
-            emit vmSelected(ProcessorType::RV5Stage_NH_NF);
+            if (processorType.contains("w/o hazard", Qt::CaseInsensitive))
+                emit vmSelected(ProcessorType::RV5Stage_NH_NF);
+            else
+                emit vmSelected(ProcessorType::RV5Stage_H_NF);
         }
-        else if (processorType == "5 statge Processor w/ hazard detection w/o forwarding")
+        else if (processorType.contains("w/ forwarding", Qt::CaseInsensitive))
         {
-            emit vmSelected(ProcessorType::RV5Stage_H_NF);
-        }
-        else if (processorType == "5 statge Processor w/o hazard detection w/ forwarding")
-        {
-            emit vmSelected(ProcessorType::RV5Stage_NH_F);
-        }
-        else if (processorType == "5 statge Processor w/ hazard detection w/ forwarding")
-        {
-            emit vmSelected(ProcessorType::RV5Stage_H_F);
+            if (processorType.contains("w/o hazard", Qt::CaseInsensitive))
+                emit vmSelected(ProcessorType::RV5Stage_NH_F);
+            else
+                emit vmSelected(ProcessorType::RV5Stage_H_F);
         }
     }
 }

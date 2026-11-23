@@ -19,7 +19,7 @@ ProfilerTab::ProfilerTab(QWidget *parent, const Profiler *profiler)
     if (m_profiler)
     {   
         InstructionTypeCountModel *model = new InstructionTypeCountModel(this, 
-        m_profiler->getInstructionTypeCounts());
+        &m_profiler->getInstructionTypeCounts());
         ui->instructionTypeCountTableView->setModel(model);
         // connect(m_profiler, &Profiler::lineExecutionCountsUpdated, this,
         //         &ProfilerTab::updateLineExecutionCounts);
@@ -62,6 +62,6 @@ void ProfilerTab::updateStatistics(const std::map<std::string, int> &statistics)
 
 void ProfilerTab::resetProfilerView()
 {
-
+    ui->plainTextEdit->clearExecutionCount();
 }
 } // namespace Kites

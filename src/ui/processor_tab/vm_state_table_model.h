@@ -23,6 +23,7 @@ class VMStateTableModel : public QAbstractTableModel
 
   public slots:
     void vmStateChangedSlot(const QMap<QString, QVariant> &processorState);
+    void updateState();
 };
 } // namespace kites
 

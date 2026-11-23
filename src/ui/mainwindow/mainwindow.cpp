@@ -180,12 +180,15 @@ void MainWindow::setUpToolBar()
     toolbar->addAction(redoAction);
 
     connect(runAction, &QAction::triggered, this,
-            [this, processorAction, runAction, pauseAction, debugAction]()
+            [this, processorAction, runAction, pauseAction, debugAction, stepAction, undoAction, redoAction]()
             {
                 if (runAction->text() == "Run")
                 {
                     debugAction->setDisabled(true);
                     processorAction->setDisabled(true);
+                    stepAction->setDisabled(true);
+                    undoAction->setDisabled(true);
+                    redoAction->setDisabled(true);
                     pauseAction->setEnabled(true);
                     runAction->setText("Stop");
                     runAction->setIcon(IconManager::getInstance().getIcon(Icon::Stop));
@@ -409,6 +412,17 @@ void MainWindow::setUpTabs()
     // memory tab: highlight the bytes written by the latest step/undo/redo
     connect(m_processorManager, &ProcessorManager::processorStateChangedSignal,
             dynamic_cast<MemoryTab *>(m_tabs[TabIndex::MemoryTabIndex]), &MemoryTab::onStepFinished);
+    // register container: clear highlight when step writes no registers
+    connect(m_processorManager, &ProcessorManager::processorStateChangedSignal,
+            m_registerContainer, &RegisterContainer::onStepFinished);
+    // compiler tab: copy assembly to editor
+    auto *compilerTab = dynamic_cast<CompilerTab *>(m_tabs[TabIndex::CompilerTabIndex]);
+    auto *editorTab = dynamic_cast<EditorTab *>(m_tabs[TabIndex::EditorTabIndex]);
+    if (compilerTab && editorTab)
+    {
+        connect(compilerTab, &CompilerTab::copyToMainEditorSignal, editorTab,
+                [editorTab](const QString &code) { editorTab->setRawText(code); });
+    }
     // a little experiment
     connect(this, &MainWindow::processorChangedSignal,
             dynamic_cast<ProcessorTab *>(m_tabs[TabIndex::ProcessorTabIndex]),
@@ -557,7 +571,8 @@ void MainWindow::runFinishedSlot()
             // in case we stop while paused
         }
 
-        if (action->text() == "Pause" || action->text() == "Stop" || action->text() == "Step")
+        if (action->text() == "Pause" || action->text() == "Stop" || action->text() == "Step" ||
+            action->text() == "Undo" || action->text() == "Redo")
         {
             action->setDisabled(true);
         }
@@ -608,6 +623,10 @@ void MainWindow::themeChangedSlot([[maybe_unused]] const QString &themeId)
             {
                 action->setIcon(IconManager::getInstance().getIcon(Icon::Step));
             }
+            else if (action->text() == "Debug Run")
+            {
+                action->setIcon(IconManager::getInstance().getIcon(Icon::Debug));
+            }
         }
     }
 
@@ -642,6 +661,6 @@ MainWindow::~MainWindow()
         m_processorThread->quit();
         m_processorThread->wait();
     }
-    // delete ui;
+    delete m_processorManager;
 }
 } // namespace Kites

@@ -15,6 +15,11 @@ ProcessorTab::ProcessorTab(QWidget *parent, ProcessorManager *vmManager)
     ui->graphicsView->setScene(m_vmManager->getCircuitScene());
     ui->tableView->setModel(m_vmStateTableModel);
     ui->tableView->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+
+    connect(m_vmManager, &ProcessorManager::processorClockedSignal,
+            m_vmStateTableModel, &VMStateTableModel::updateState);
+    connect(m_vmManager, &ProcessorManager::processorStateChangedSignal,
+            m_vmStateTableModel, &VMStateTableModel::updateState);
 }
 
 void ProcessorTab::setWiresStayActive(bool stayActive)
@@ -33,6 +38,7 @@ void ProcessorTab::onVMChanged()
     bool stayActive = m_vmManager->getCircuitScene()->getWireStayActive();
     ui->graphicsView->setScene(m_vmManager->getCircuitScene());
     m_vmManager->getCircuitScene()->setWireStayActive(stayActive);
+    m_vmStateTableModel->updateState();
     // keep the wire stay active setting
 }
 

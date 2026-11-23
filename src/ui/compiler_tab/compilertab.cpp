@@ -62,15 +62,10 @@ void CompilerTab::onCopyToMainEditorClicked()
         return;
     }
 
-    // Emit a signal or directly call a method to send this assembly code to the main editor
-    // For example, if you have a signal:
-    // emit assemblyReadyForMainEditor(assemblyCode);
-    // Or if you have direct access to the main editor instance:
-    // mainEditor->setPlainText(assemblyCode);
-
-    // For demonstration, let's just copy it to the clipboard
     QClipboard *clipboard = QGuiApplication::clipboard();
     clipboard->setText(assemblyCode);
+
+    emit copyToMainEditorSignal(assemblyCode);
 }
 
 void CompilerTab::onConvertToAssemblyClicked()

@@ -26,8 +26,10 @@ class RegisterContainer : public QWidget
     explicit RegisterContainer(QWidget *parent = nullptr, RegisterFile *regfile = nullptr);
     ~RegisterContainer();
     void setRegisterFile(RegisterFile *regfile);
-    // private slots:
-    //     void updateRegisterValue(size_t regIndex, uint64_t value);
+
+  public slots:
+    void onStepFinished();
+
   private:
     void setupRegisterTable();
     void setupVectorSections(QVBoxLayout *sectionsLayout);

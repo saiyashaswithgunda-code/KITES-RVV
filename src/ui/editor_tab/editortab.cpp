@@ -166,6 +166,8 @@ void EditorTab::showRuntimeError(int line, const QString &message)
         return;
     m_editor->setLinesToHighlight({{line, "Runtime Error"}});
     m_editor->setErrorMessage(line - 1, message);
+    m_expandedView->setLinesToHighlight({{line, "Runtime Error"}});
+    m_expandedView->setErrorMessage(line - 1, message);
 }
 
 void EditorTab::clearHighlights()

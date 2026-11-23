@@ -92,4 +92,10 @@ void VMStateTableModel::vmStateChangedSlot(const QMap<QString, QVariant> &proces
     beginResetModel();
     endResetModel();
 }
+
+void VMStateTableModel::updateState()
+{
+    beginResetModel();
+    endResetModel();
+}
 } // namespace Kites

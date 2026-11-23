@@ -1,0 +1,8 @@
+{
+    "memory_ranges": [],
+    "ignored_registers": {
+        "gp_registers": ["x7"],
+        "vector_registers": [],
+        "vector_control_status_registers": []
+    }
+}

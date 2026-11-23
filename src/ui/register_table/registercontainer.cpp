@@ -6,6 +6,7 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QScrollArea>
 #include <QSortFilterProxyModel>
 #include <QTableView>
 #include <QVBoxLayout>
@@ -46,6 +47,14 @@ RegisterContainer::RegisterContainer(QWidget *parent, RegisterFile *regfile)
       m_vectorCsrModel(new VectorCsrModel(this, regfile))
 {
     ui->setupUi(this);
+
+    auto *scrollArea = new QScrollArea(this);
+    scrollArea->setWidget(ui->sectionsContainer);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    ui->gridLayout->addWidget(scrollArea, 0, 0, 1, 2);
+
     setupRegisterTable();
 
     ui->displayType->setCurrentText("Hexadecimal");
@@ -181,6 +190,12 @@ void RegisterContainer::setRegisterFile(RegisterFile *regfile)
     m_registerModel->changeRegisterFile(regfile);
     m_vectorRegisterModel->changeRegisterFile(regfile);
     m_vectorCsrModel->changeRegisterFile(regfile);
+}
+
+void RegisterContainer::onStepFinished()
+{
+    m_registerModel->stepFinished();
+    m_vectorRegisterModel->stepFinished();
 }
 
 RegisterContainer::~RegisterContainer()

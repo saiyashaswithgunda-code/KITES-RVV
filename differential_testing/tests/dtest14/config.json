@@ -1,0 +1,21 @@
+{
+    "memory_ranges": [
+        {
+            "address": "80001100",
+            "rows": 2
+        },
+        {
+            "address": "80001120",
+            "rows": 2
+        },
+        {
+            "address": "80001140",
+            "rows": 2
+        }
+    ],
+    "ignored_registers": {
+        "gp_registers": ["x7"],
+        "vector_registers": [],
+        "vector_control_status_registers": []
+    }
+}

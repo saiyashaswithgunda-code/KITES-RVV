@@ -42,12 +42,16 @@ void CacheModel::attachCache(Cache *cache)
 int CacheModel::rowCount(const QModelIndex &parent) const
 {
     Q_UNUSED(parent);
+    if (!m_cache)
+        return 0;
     return static_cast<int>(m_cache->getSetCount() * m_cache->getWayCount());
 }
 
 int CacheModel::columnCount(const QModelIndex &parent) const
 {
     Q_UNUSED(parent);
+    if (!m_cache)
+        return 0;
     return static_cast<int>(Column::DataStart) + 
     static_cast<int>(m_cache->getLineSizeInBytes() / sizeof(uint32_t));
 }

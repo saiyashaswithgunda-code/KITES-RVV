@@ -198,6 +198,7 @@ void VectorRegisterModel::updateVRegisterValue(size_t regIndex)
 {
     if (regIndex >= RegisterFile::NUM_VREG)
         return;
+    m_stepHadWrites = true;
     const int previous = m_highlightedRegister;
     m_highlightedRegister = static_cast<int>(regIndex);
     // Only the previously highlighted row and the written row need repainting.
@@ -221,8 +222,23 @@ void VectorRegisterModel::registerResetSlot()
 {
     beginResetModel();
     m_highlightedRegister = -1;
+    m_stepHadWrites = false;
     m_sewBits = decodeSewBits();
     endResetModel();
+}
+
+void VectorRegisterModel::stepFinished()
+{
+    if (!m_stepHadWrites)
+    {
+        if (m_highlightedRegister != -1)
+        {
+            const int previous = m_highlightedRegister;
+            m_highlightedRegister = -1;
+            emitRowChanged(previous);
+        }
+    }
+    m_stepHadWrites = false;
 }
 
 } // namespace Kites

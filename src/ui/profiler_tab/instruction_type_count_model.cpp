@@ -6,8 +6,7 @@ namespace instr = instruction_set;
 
 InstructionTypeCountModel::InstructionTypeCountModel(
     QObject *parent, 
-    const std::array<size_t, toIndex(instr::InstructionType::INSTRUCTION_TYPE_COUNT)> 
-    &instruction_type_counts)
+    const InstructionTypeCounts *instruction_type_counts)
     : QAbstractTableModel(parent), m_instructionTypeCounts(instruction_type_counts)
 {}
 
@@ -61,7 +60,7 @@ QVariant InstructionTypeCountModel::data(const QModelIndex &index, int role) con
     else if (column == Column::InstructionCount)
     {
         // Return the count
-        size_t count = m_instructionTypeCounts[static_cast<size_t>(index.row())];
+        size_t count = m_instructionTypeCounts ? (*m_instructionTypeCounts)[static_cast<size_t>(index.row())] : 0;
         return QString::number(count);
     }
 

@@ -23,6 +23,9 @@ class CompilerTab : public KitesTab
     void onCopyToMainEditorClicked();
     void onConvertToAssemblyClicked();
 
+  signals:
+    void copyToMainEditorSignal(const QString &assemblyCode);
+
   private slots:
     void applyOutputBorderStyle();
 

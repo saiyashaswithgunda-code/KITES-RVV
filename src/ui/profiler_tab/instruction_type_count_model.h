@@ -13,7 +13,7 @@ class InstructionTypeCountModel : public QAbstractTableModel
     toIndex(instruction_set::InstructionType::INSTRUCTION_TYPE_COUNT)>;
     public:
     InstructionTypeCountModel(QObject *parent = nullptr,
-        const InstructionTypeCounts &instruction_type_counts = {});
+        const InstructionTypeCounts *instruction_type_counts = nullptr);
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     QVariant headerData(int section, Qt::Orientation orientation,
                         int role = Qt::DisplayRole) const override;
@@ -30,9 +30,9 @@ class InstructionTypeCountModel : public QAbstractTableModel
         InstructionType = 0,
         InstructionCount = 1
     };
-    // using const here because the model should not modify the counts, 
+    // using const pointer here because the model should not modify the counts,
     // it should only display them
-    const InstructionTypeCounts &m_instructionTypeCounts;
+    const InstructionTypeCounts *m_instructionTypeCounts = nullptr;
 };  
 } // namespace kites
 

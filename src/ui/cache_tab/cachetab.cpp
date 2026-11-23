@@ -104,25 +104,25 @@ void CacheTab::changeMemoryController(MemoryController *memoryController)
     // their configChanged->cacheConfigChanged wiring installed in constructor.
 
     connect(ui->L1Config, &CacheConfigWidget::customPolicyScriptSelectedSignal,
-            m_memoryController->getL1Cache(), &Cache::loadCustomPolicyScript);
+            m_memoryController->getL1Cache(), &Cache::loadCustomPolicyScript, Qt::UniqueConnection);
     connect(ui->L2Config, &CacheConfigWidget::customPolicyScriptSelectedSignal,
-            m_memoryController->getL2Cache(), &Cache::loadCustomPolicyScript);
+            m_memoryController->getL2Cache(), &Cache::loadCustomPolicyScript, Qt::UniqueConnection);
     connect(ui->InstructionConfig, &CacheConfigWidget::customPolicyScriptSelectedSignal,
-            m_memoryController->getInstructionCache(), &Cache::loadCustomPolicyScript);
+            m_memoryController->getInstructionCache(), &Cache::loadCustomPolicyScript, Qt::UniqueConnection);
 
     connect(m_memoryController->getL1Cache(), &Cache::cacheStatsUpdatedSignal, ui->L1Config,
-            &CacheConfigWidget::cacheStatsUpdatedSlot);
+            &CacheConfigWidget::cacheStatsUpdatedSlot, Qt::UniqueConnection);
     connect(m_memoryController->getL2Cache(), &Cache::cacheStatsUpdatedSignal, ui->L2Config,
-            &CacheConfigWidget::cacheStatsUpdatedSlot);
+            &CacheConfigWidget::cacheStatsUpdatedSlot, Qt::UniqueConnection);
     connect(m_memoryController->getInstructionCache(), &Cache::cacheStatsUpdatedSignal,
-            ui->InstructionConfig, &CacheConfigWidget::cacheStatsUpdatedSlot);
+            ui->InstructionConfig, &CacheConfigWidget::cacheStatsUpdatedSlot, Qt::UniqueConnection);
 
     connect(m_memoryController->getL1Cache(), &Cache::customPolicyScriptLoadedSignal, ui->L1Config,
-            &CacheConfigWidget::customPolicyScriptLoadedSlot);
+            &CacheConfigWidget::customPolicyScriptLoadedSlot, Qt::UniqueConnection);
     connect(m_memoryController->getL2Cache(), &Cache::customPolicyScriptLoadedSignal, ui->L2Config,
-            &CacheConfigWidget::customPolicyScriptLoadedSlot);
+            &CacheConfigWidget::customPolicyScriptLoadedSlot, Qt::UniqueConnection);
     connect(m_memoryController->getInstructionCache(), &Cache::customPolicyScriptLoadedSignal,
-            ui->InstructionConfig, &CacheConfigWidget::customPolicyScriptLoadedSlot);
+            ui->InstructionConfig, &CacheConfigWidget::customPolicyScriptLoadedSlot, Qt::UniqueConnection);
 }
 
 bool CacheTab::enforceL2AtLeastL1()

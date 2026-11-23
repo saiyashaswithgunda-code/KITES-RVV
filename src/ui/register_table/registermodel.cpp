@@ -130,9 +130,9 @@ QVariant RegisterModel::data(const QModelIndex &index, int role) const
                 case Base::Decimal:
                 {
                     uint32_t upper32 = static_cast<uint32_t>(raw >> 32);
-                    if (upper32 == 0)
+                    if (upper32 == 0xFFFFFFFF || upper32 == 0)
                     {
-                        // Single-precision float (F-extension): value in lower 32 bits
+                        // Single-precision float (F-extension): NaN-boxed (upper 32 bits 1s) or zero-extended
                         uint32_t lower32 = static_cast<uint32_t>(raw & 0xFFFFFFFF);
                         float fval;
                         memcpy(&fval, &lower32, sizeof(float));
@@ -181,6 +181,8 @@ void RegisterModel::changeRegisterFile(RegisterFile *regfile)
 
 void RegisterModel::registerResetSlot()
 {
+    m_stepHadWrites = false;
+    m_highlightedRegisterIndex = static_cast<size_t>(-1);
     beginResetModel();
     endResetModel();
 }
@@ -188,6 +190,7 @@ void RegisterModel::registerResetSlot()
 void RegisterModel::updateRegisterValue(size_t regIndex, uint64_t value)
 {
     //QModelIndex index = this->index(static_cast<int>(regIndex), 2);
+    m_stepHadWrites = true;
     m_highlightedRegisterIndex = regIndex; // Update highlighted register index
     // emit dataChanged(index,index);
     beginResetModel();
@@ -197,9 +200,24 @@ void RegisterModel::updateRegisterValue(size_t regIndex, uint64_t value)
 void RegisterModel::updateFRegisterValue(size_t regIndex, uint64_t value)
 {
     //QModelIndex index = this->index(static_cast<int>(regIndex + 32), 2);
+    m_stepHadWrites = true;
     m_highlightedRegisterIndex = regIndex + 32; // Update highlighted register index
     // emit dataChanged(index,index);
     beginResetModel();
     endResetModel();
+}
+
+void RegisterModel::stepFinished()
+{
+    if (!m_stepHadWrites)
+    {
+        if (m_highlightedRegisterIndex != static_cast<size_t>(-1))
+        {
+            m_highlightedRegisterIndex = static_cast<size_t>(-1);
+            beginResetModel();
+            endResetModel();
+        }
+    }
+    m_stepHadWrites = false;
 }
 } // namespace Kites

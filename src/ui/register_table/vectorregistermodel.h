@@ -54,6 +54,7 @@ class VectorRegisterModel : public QAbstractTableModel
     void updateVRegisterValue(size_t regIndex);
     void vectorCsrChangedSlot();
     void registerResetSlot();
+    void stepFinished();
 
   private:
     void connectRegisterFile();
@@ -64,6 +65,7 @@ class VectorRegisterModel : public QAbstractTableModel
     VectorDisplayFormat m_displayFormat = VectorDisplayFormat::Hexadecimal;
     unsigned m_sewBits = 8;
     int m_highlightedRegister = -1;
+    bool m_stepHadWrites = false;
 };
 
 } // namespace Kites

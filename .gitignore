@@ -23,3 +23,10 @@ CMakeLists.txt.user
 gtest_filter.
 .vs/
 gtest_filter.py
+
+# Local CMake configuration
+CMakeUserPresets.json
+
+# Generated files
+__pycache__/
+CMakeFiles/
