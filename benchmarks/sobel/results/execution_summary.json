@@ -1,0 +1,27 @@
+{
+    "workload": "Sobel Image Edge Detection (32x32)",
+    "data_size": 1024,
+    "expected_checksum": 53140,
+    "scalar": {
+        "total_instructions": 33228,
+        "kernel_instructions": 28095,
+        "harness_instructions": 5133,
+        "checksum_result": 53140,
+        "element_mismatches": 0,
+        "errors": 0,
+        "verified": true
+    },
+    "vector": {
+        "total_instructions": 29216,
+        "kernel_instructions": 24083,
+        "harness_instructions": 5133,
+        "checksum_result": 53140,
+        "element_mismatches": 0,
+        "errors": 0,
+        "verified": true
+    },
+    "total_reduction_percent": 12.07,
+    "kernel_reduction_percent": 14.28,
+    "speedup_ratio": 1.14,
+    "kernel_speedup_ratio": 1.17
+}

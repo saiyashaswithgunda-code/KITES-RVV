@@ -1,0 +1,27 @@
+{
+    "workload": "Integer Matrix Multiplication (16x16)",
+    "data_size": 256,
+    "expected_checksum": -78,
+    "scalar": {
+        "total_instructions": 31066,
+        "kernel_instructions": 29772,
+        "harness_instructions": 1294,
+        "checksum_result": -78,
+        "element_mismatches": 0,
+        "errors": 0,
+        "verified": true
+    },
+    "vector": {
+        "total_instructions": 13926,
+        "kernel_instructions": 12632,
+        "harness_instructions": 1294,
+        "checksum_result": -78,
+        "element_mismatches": 0,
+        "errors": 0,
+        "verified": true
+    },
+    "total_reduction_percent": 55.17,
+    "kernel_reduction_percent": 57.57,
+    "speedup_ratio": 2.23,
+    "kernel_speedup_ratio": 2.36
+}

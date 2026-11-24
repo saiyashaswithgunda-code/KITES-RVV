@@ -1,0 +1,21 @@
+benchmarks/fir_filter/reference/fir_filter.c:37:28: missed: couldn't vectorize loop
+benchmarks/fir_filter/reference/fir_filter.c:37:28: missed: not vectorized: unsupported control flow in loop.
+benchmarks/fir_filter/reference/fir_filter.c:40:32: optimized: loop vectorized using variable length vectors
+benchmarks/fir_filter/reference/fir_filter.c:37:28: missed: couldn't vectorize loop
+benchmarks/fir_filter/reference/fir_filter.c:37:28: missed: not vectorized: inner-loop count not invariant.
+benchmarks/fir_filter/reference/fir_filter.c:40:32: optimized: loop vectorized using variable length vectors
+benchmarks/fir_filter/reference/fir_filter.c:32:6: note: vectorized 2 loops in function.
+benchmarks/fir_filter/reference/fir_filter.c:41:17: note: ***** Analysis failed with vector mode RVVM1SI
+benchmarks/fir_filter/reference/fir_filter.c:41:17: note: ***** The result for vector mode RVVM1QI would be the same
+benchmarks/fir_filter/reference/fir_filter.c:41:17: note: ***** The result for vector mode RVVMF2QI would be the same
+benchmarks/fir_filter/reference/fir_filter.c:41:17: note: ***** The result for vector mode RVVMF4QI would be the same
+benchmarks/fir_filter/reference/fir_filter.c:41:17: note: ***** Re-trying analysis with vector mode RVVMF8QI
+benchmarks/fir_filter/reference/fir_filter.c:41:17: note: ***** Analysis failed with vector mode RVVMF8QI
+benchmarks/fir_filter/reference/fir_filter.c:41:17: note: ***** Re-trying analysis with vector mode V16QI
+benchmarks/fir_filter/reference/fir_filter.c:41:17: note: ***** Analysis failed with vector mode V16QI
+benchmarks/fir_filter/reference/fir_filter.c:41:17: note: ***** The result for vector mode V8QI would be the same
+benchmarks/fir_filter/reference/fir_filter.c:41:17: note: ***** The result for vector mode V4QI would be the same
+benchmarks/fir_filter/reference/fir_filter.c:41:17: note: ***** Re-trying analysis with vector mode V2QI
+benchmarks/fir_filter/reference/fir_filter.c:41:17: note: ***** Analysis failed with vector mode V2QI
+benchmarks/fir_filter/reference/fir_filter.c:41:17: note: ***** Re-trying analysis with vector mode V1QI
+benchmarks/fir_filter/reference/fir_filter.c:41:17: note: ***** Analysis failed with vector mode V1QI

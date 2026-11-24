@@ -1,0 +1,5 @@
+benchmarks/dot_product/reference/dot_product.c:30:28: optimized: loop vectorized using variable length vectors
+benchmarks/dot_product/reference/dot_product.c:28:9: note: vectorized 1 loops in function.
+benchmarks/dot_product/reference/dot_product.c:31:17: missed: statement clobbers memory: vect__3.7_26 = .MASK_LEN_LOAD (vectp_a.5_29, 32B, { -1, ... }, _27(D), _38, 0);
+benchmarks/dot_product/reference/dot_product.c:31:24: missed: statement clobbers memory: vect__5.10_21 = .MASK_LEN_LOAD (vectp_b.8_24, 32B, { -1, ... }, _22(D), _38, 0);
+benchmarks/dot_product/reference/dot_product.c:33:12: note: ***** Analysis failed with vector mode VOID

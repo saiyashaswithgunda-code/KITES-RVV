@@ -1,0 +1,16 @@
+benchmarks/sobel/reference/sobel.c:53:28: missed: couldn't vectorize loop
+benchmarks/sobel/reference/sobel.c:59:38: missed: not vectorized: complicated access pattern.
+benchmarks/sobel/reference/sobel.c:58:32: optimized: loop vectorized using variable length vectors
+benchmarks/sobel/reference/sobel.c:49:28: optimized: loop vectorized using variable length vectors
+benchmarks/sobel/reference/sobel.c:44:6: note: vectorized 2 loops in function.
+benchmarks/sobel/reference/sobel.c:50:19: missed: statement clobbers memory: .MASK_LEN_STORE (vectp_output.84_927, 8B, { -1, ... }, _932, 0, { 0, ... });
+benchmarks/sobel/reference/sobel.c:59:38: missed: statement clobbers memory: vect__7.14_827 = .MASK_LEN_LOAD (vectp.12_824, 8B, { -1, ... }, _826(D), _924, 0);
+benchmarks/sobel/reference/sobel.c:60:38: missed: statement clobbers memory: vect__9.56_887 = .MASK_LEN_LOAD (vectp.54_884, 8B, { -1, ... }, _886(D), _924, 0);
+benchmarks/sobel/reference/sobel.c:61:38: missed: statement clobbers memory: vect__12.10_820 = .MASK_LEN_LOAD (vectp.8_817, 8B, { -1, ... }, _819(D), _924, 0);
+benchmarks/sobel/reference/sobel.c:63:38: missed: statement clobbers memory: vect__16.25_845 = .MASK_LEN_LOAD (vectp.23_842, 8B, { -1, ... }, _844(D), _924, 0);
+benchmarks/sobel/reference/sobel.c:64:38: missed: statement clobbers memory: vect__19.21_838 = .MASK_LEN_LOAD (vectp.19_835, 8B, { -1, ... }, _837(D), _924, 0);
+benchmarks/sobel/reference/sobel.c:66:38: missed: statement clobbers memory: vect__23.42_869 = .MASK_LEN_LOAD (vectp.40_866, 8B, { -1, ... }, _868(D), _924, 0);
+benchmarks/sobel/reference/sobel.c:67:38: missed: statement clobbers memory: vect__25.60_895 = .MASK_LEN_LOAD (vectp.58_892, 8B, { -1, ... }, _894(D), _924, 0);
+benchmarks/sobel/reference/sobel.c:68:38: missed: statement clobbers memory: vect__28.38_862 = .MASK_LEN_LOAD (vectp.36_859, 8B, { -1, ... }, _861(D), _924, 0);
+benchmarks/sobel/reference/sobel.c:81:34: missed: statement clobbers memory: .MASK_LEN_STORE (vectp.81_919, 8B, { -1, ... }, _924, 0, vect_patt_299.80_915);
+benchmarks/sobel/reference/sobel.c:84:1: note: ***** Analysis failed with vector mode VOID

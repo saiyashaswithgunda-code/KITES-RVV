@@ -1,0 +1,33 @@
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:43:28: missed: couldn't vectorize loop
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:43:28: missed: not vectorized: loop nest containing two or more consecutive inner loops cannot be vectorized
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:44:32: missed: couldn't vectorize loop
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:47:30: missed: not vectorized: complicated access pattern.
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:46:36: optimized: loop vectorized using variable length vectors
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:45:41: missed: couldn't vectorize loop
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:47:30: missed: not vectorized: complicated access pattern.
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:46:36: optimized: loop vectorized using variable length vectors
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:39:32: optimized: loop vectorized using variable length vectors
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:34:6: note: vectorized 3 loops in function.
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:40:16: missed: statement clobbers memory: .MASK_LEN_STORE (vectp_c.39_159, 32B, { -1, ... }, _164, 0, { 0, ... });
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:47:18: missed: statement clobbers memory: vect__10.22_118 = .MASK_LEN_LOAD (vectp.20_20, 32B, { -1, ... }, _18(D), _153, 0);
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:47:40: missed: statement clobbers memory: vect__15.25_125 = .MASK_LEN_LOAD (vectp.23_122, 32B, { -1, ... }, _124(D), _153, 0);
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:47:30: missed: statement clobbers memory: .MASK_LEN_STORE (vectp.28_132, 32B, { -1, ... }, _153, 0, vect__17.27_128);
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:47:40: missed: statement clobbers memory: vect__71.32_141 = .MASK_LEN_LOAD (vectp.30_138, 32B, { -1, ... }, _140(D), _153, 0);
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:47:30: missed: statement clobbers memory: .MASK_LEN_STORE (vectp.35_148, 32B, { -1, ... }, _153, 0, vect__69.34_144);
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:47:18: missed: statement clobbers memory: vect__100.11_80 = .MASK_LEN_LOAD (vectp.9_115, 32B, { -1, ... }, _87(D), _25, 0);
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:47:40: missed: statement clobbers memory: vect__96.14_60 = .MASK_LEN_LOAD (vectp.12_75, 32B, { -1, ... }, _61(D), _25, 0);
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:47:30: missed: statement clobbers memory: .MASK_LEN_STORE (vectp.17_43, 32B, { -1, ... }, _25, 0, vect__94.16_52);
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:45:41: note: ***** Analysis failed with vector mode RVVM1SI
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:45:41: note: ***** The result for vector mode RVVM1QI would be the same
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:45:41: note: ***** The result for vector mode RVVMF2QI would be the same
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:45:41: note: ***** The result for vector mode RVVMF4QI would be the same
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:45:41: note: ***** Re-trying analysis with vector mode RVVMF8QI
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:45:41: note: ***** Analysis failed with vector mode RVVMF8QI
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:45:41: note: ***** Re-trying analysis with vector mode V16QI
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:45:41: note: ***** Analysis failed with vector mode V16QI
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:45:41: note: ***** The result for vector mode V8QI would be the same
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:45:41: note: ***** The result for vector mode V4QI would be the same
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:45:41: note: ***** Re-trying analysis with vector mode V2QI
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:45:41: note: ***** Analysis failed with vector mode V2QI
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:45:41: note: ***** Re-trying analysis with vector mode V1QI
+benchmarks/matrix_multiplication/reference/matrix_multiplication.c:45:41: note: ***** Analysis failed with vector mode V1QI

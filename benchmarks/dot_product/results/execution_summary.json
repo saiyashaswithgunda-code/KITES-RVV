@@ -1,0 +1,27 @@
+{
+    "workload": "Integer Dot Product (N=256)",
+    "data_size": 256,
+    "expected_checksum": -856,
+    "scalar": {
+        "total_instructions": 1804,
+        "kernel_instructions": 1798,
+        "harness_instructions": 6,
+        "checksum_result": -856,
+        "element_mismatches": 0,
+        "errors": 0,
+        "verified": true
+    },
+    "vector": {
+        "total_instructions": 591,
+        "kernel_instructions": 585,
+        "harness_instructions": 6,
+        "checksum_result": -856,
+        "element_mismatches": 0,
+        "errors": 0,
+        "verified": true
+    },
+    "total_reduction_percent": 67.24,
+    "kernel_reduction_percent": 67.46,
+    "speedup_ratio": 3.05,
+    "kernel_speedup_ratio": 3.07
+}

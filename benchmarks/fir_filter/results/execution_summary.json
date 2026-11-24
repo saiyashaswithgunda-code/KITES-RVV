@@ -1,0 +1,27 @@
+{
+    "workload": "Integer FIR Filter (256 samples, 16 taps)",
+    "data_size": 256,
+    "expected_checksum": -8806,
+    "scalar": {
+        "total_instructions": 31429,
+        "kernel_instructions": 30134,
+        "harness_instructions": 1295,
+        "checksum_result": -8806,
+        "element_mismatches": 0,
+        "errors": 0,
+        "verified": true
+    },
+    "vector": {
+        "total_instructions": 11686,
+        "kernel_instructions": 10391,
+        "harness_instructions": 1295,
+        "checksum_result": -8806,
+        "element_mismatches": 0,
+        "errors": 0,
+        "verified": true
+    },
+    "total_reduction_percent": 62.82,
+    "kernel_reduction_percent": 65.52,
+    "speedup_ratio": 2.69,
+    "kernel_speedup_ratio": 2.9
+}
