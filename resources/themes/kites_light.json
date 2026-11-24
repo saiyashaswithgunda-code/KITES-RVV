@@ -20,6 +20,7 @@
             "mInstruction": "#af00af",
             "fInstruction": "#af00af",
             "dInstruction": "#8a6d00",
+            "vInstruction": "#008080",
             "pseudoInstruction": "#ff8c00",
             "register": "#800080",
             "comment": "#008000",

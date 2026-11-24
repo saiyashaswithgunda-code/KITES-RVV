@@ -6,6 +6,11 @@
 
 #include <QObject>
 #include <QString>
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QTextDocument>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -14,12 +19,15 @@
 #include "common/assembled_program.h"
 #include "common/globals.h"
 #include "common/instructions.h"
+#include "language_service/completion_provider.h"
 #include "profiler/profiler.h"
 #include "processor/registers.h"
 #include "processor/rvss/rvss_processor.h"
+#include "ui/common/syntax_highlighter.h"
 #include "ui/memory_tab/memorymodel.h"
 #include "ui/register_table/vectorcsrmodel.h"
 #include "ui/register_table/vectorregistermodel.h"
+#include "ui/theme/theme_manager.h"
 #include "utils/utils.h"
 
 using namespace Kites;
@@ -544,4 +552,111 @@ TEST(VectorProfilerTest, VectorInstructionsHaveATypeAndDoNotOverflowCounts)
     const auto &counts = profiler.getInstructionTypeCounts();
     EXPECT_GT(counts[toIndex(InstructionType::V_TYPE)], 0u);
     EXPECT_EQ(instruction_set::instructionTypeNames[toIndex(InstructionType::V_TYPE)], "V-Type");
+}
+
+// ---------------------------------------------------------------------------------------------
+// Syntax Highlighting & Instructions Database for RVV
+// ---------------------------------------------------------------------------------------------
+TEST(VectorSyntaxHighlighterTest, InstructionsJsonContainsAllSupportedRvvInstructions)
+{
+    QFile file(":/instructions/instructions.json");
+    ASSERT_TRUE(file.open(QIODevice::ReadOnly)) << file.errorString().toStdString();
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    ASSERT_FALSE(doc.isNull());
+    const QJsonObject root = doc.object();
+    ASSERT_TRUE(root.contains("VInstruction"));
+    const QJsonArray vInsts = root.value("VInstruction").toArray();
+    EXPECT_EQ(vInsts.size(), 100);
+
+    for (const auto &val : vInsts)
+    {
+        const std::string mnemonic = val.toString().toStdString();
+        EXPECT_TRUE(instruction_set::isValidInstruction(mnemonic)) << "Invalid instruction: " << mnemonic;
+        EXPECT_TRUE(instruction_set::getInstructionType(mnemonic) == instruction_set::InstructionType::V_TYPE || mnemonic == "vsetvli")
+            << "Not V_TYPE or vsetvli: " << mnemonic;
+    }
+}
+
+TEST(VectorSyntaxHighlighterTest, ThemeManagerHasVInstructionFormat)
+{
+    const auto &tm = ThemeManager::getInstance();
+    const QTextCharFormat vFormat = tm.getSyntaxFormat(SyntaxStyle::VInstruction);
+    EXPECT_TRUE(vFormat.foreground().color().isValid());
+    EXPECT_EQ(vFormat.fontWeight(), QFont::Bold);
+
+    const QTextCharFormat r32Format = tm.getSyntaxFormat(SyntaxStyle::R32Instruction);
+    EXPECT_TRUE(r32Format.foreground().color().isValid());
+    EXPECT_NE(vFormat.foreground().color(), QColor(Qt::black));
+}
+
+TEST(VectorSyntaxHighlighterTest, CompletionProviderIncludesRvvMnemonics)
+{
+    const auto &completions = CompletionProvider::getInstance().staticSymbols();
+    EXPECT_TRUE(completions.contains("vsetvli"));
+    EXPECT_TRUE(completions.contains("vadd.vv"));
+    EXPECT_TRUE(completions.contains("vle32.v"));
+    EXPECT_TRUE(completions.contains("vse32.v"));
+    EXPECT_TRUE(completions.contains("vredsum.vs"));
+}
+
+TEST(VectorSyntaxHighlighterTest, SyntaxHighlighterAppliesVectorStyles)
+{
+    QTextDocument doc;
+    SyntaxHighlighter highlighter(&doc);
+    doc.setPlainText("vsetvli t0, a0, e32, m1, ta, ma\n"
+                     "vadd.vv v1, v2, v3\n"
+                     "# comment with vadd.vv\n"
+                     "add x1, x2, x3");
+
+    // Force highlighting of the document
+    highlighter.rehighlight();
+    ASSERT_EQ(doc.blockCount(), 4);
+
+    const auto &tm = ThemeManager::getInstance();
+    const QColor vColor = tm.getSyntaxFormat(SyntaxStyle::VInstruction).foreground().color();
+    const QColor r32Color = tm.getSyntaxFormat(SyntaxStyle::R32Instruction).foreground().color();
+    const QColor regColor = tm.getSyntaxFormat(SyntaxStyle::Register).foreground().color();
+    const QColor commentColor = tm.getSyntaxFormat(SyntaxStyle::Comment).foreground().color();
+
+    // Line 0: vsetvli t0, a0, e32, m1, ta, ma
+    QTextBlock block0 = doc.findBlockByLineNumber(0);
+    const auto formats0 = block0.layout()->formats();
+    ASSERT_FALSE(formats0.isEmpty());
+    EXPECT_EQ(formats0[0].start, 0);
+    EXPECT_EQ(formats0[0].length, 7); // "vsetvli"
+    EXPECT_EQ(formats0[0].format.foreground().color(), vColor);
+
+    // Line 1: vadd.vv v1, v2, v3
+    QTextBlock block1 = doc.findBlockByLineNumber(1);
+    const auto formats1 = block1.layout()->formats();
+    ASSERT_GE(formats1.size(), 1);
+    EXPECT_EQ(formats1[0].start, 0);
+    EXPECT_EQ(formats1[0].length, 7); // "vadd.vv"
+    EXPECT_EQ(formats1[0].format.foreground().color(), vColor);
+
+    // Verify v1, v2, v3 receive register formatting
+    bool foundV1 = false;
+    for (const auto &range : formats1)
+    {
+        if (range.start == 8 && range.length == 2) // "v1"
+        {
+            EXPECT_EQ(range.format.foreground().color(), regColor);
+            foundV1 = true;
+        }
+    }
+    EXPECT_TRUE(foundV1);
+
+    // Line 2: # comment with vadd.vv
+    QTextBlock block2 = doc.findBlockByLineNumber(2);
+    const auto formats2 = block2.layout()->formats();
+    ASSERT_FALSE(formats2.isEmpty());
+    EXPECT_EQ(formats2.last().format.foreground().color(), commentColor);
+
+    // Line 3: add x1, x2, x3
+    QTextBlock block3 = doc.findBlockByLineNumber(3);
+    const auto formats3 = block3.layout()->formats();
+    ASSERT_FALSE(formats3.isEmpty());
+    EXPECT_EQ(formats3[0].start, 0);
+    EXPECT_EQ(formats3[0].length, 3); // "add"
+    EXPECT_EQ(formats3[0].format.foreground().color(), r32Color);
 }

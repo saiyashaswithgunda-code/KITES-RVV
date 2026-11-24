@@ -8,6 +8,7 @@ file(GLOB_RECURSE TEST_FILES CONFIGURE_DEPENDS "*.cpp")
 
 add_executable(kites_test
     ${TEST_FILES}
+    ${APP_RESOURCES}
 )
 
 target_link_libraries(kites_test PRIVATE
