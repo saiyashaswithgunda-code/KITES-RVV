@@ -68,6 +68,8 @@ enum class Instruction
     kvmulhu_vx,
     kvmulhsu_vv,
     kvmulhsu_vx,
+    kvmacc_vv,
+    kvmacc_vx,
     kvdiv_vv,
     kvdiv_vx,
     kvdivu_vv,
@@ -519,6 +521,7 @@ enum class SyntaxType
     O_GPR_C_GPR_C_VTYPE, ///< Opcode general-register , general-register , vtypeimmediate
     O_VREG_C_VREG_C_VREG, ///< Opcode vector-register, vector-register, vector-register
     O_VREG_C_VREG_C_GPR,  ///< Opcode vector-register, vector-register, general-register
+    O_VREG_C_GPR_C_VREG,  ///< Opcode vector-register, general-register, vector-register
     O_VREG_C_VREG_C_I,    ///< Opcode vector-register, vector-register, immediate
     O_VREG_C_VREG,        ///< Opcode vector-register, vector-register [, v0.t]
     O_VREG_C_LP_GPR_RP_C_GPR, ///< Opcode vector-register, (general-register), general-register [, v0.t]

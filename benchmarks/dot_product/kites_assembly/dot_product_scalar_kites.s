@@ -1,5 +1,5 @@
 # Dot Product - Scalar RV32IM (KITES)
-# Expected result in a0 (x10): -856 (0xFFFFFCB8)
+# Expected result in a0 (x10): -856 (0xFFFFFCA8)
 
 .data
 dot_product_a:

@@ -65,14 +65,14 @@ build/cli/kites-cli benchmarks/dot_product/kites_assembly/dot_product_vector_kit
 
 ## 8. Simulation Results & Verification
 
-Simulation metrics extracted from hardware execution steps and recorded in [`results/execution_summary.json`](results/execution_summary.json):
+Simulation metrics extracted from simulator execution steps and recorded in [`results/execution_summary.json`](results/execution_summary.json):
 
 | Metric | Scalar (RV32IM) | Vector (RV32IMV) | Reduction / Speedup |
 | :--- | :---: | :---: | :---: |
 | **Kernel Dynamic Instructions** | 1,798 | 585 | **67.46% reduction ($3.07\times$ speedup)** |
 | **Total Dynamic Instructions** | 1,804 | 591 | **67.24% reduction ($3.05\times$ speedup)** |
 | **Harness Overhead Instructions** | 6 | 6 | Exact match |
-| **Returned Result (`x10` / `a0`)** | `-856` (`0xFFFFFCB8`) | `-856` (`0xFFFFFCB8`) | **100% golden match** |
+| **Returned Result (`x10` / `a0`)** | `-856` (`0xFFFFFCA8`) | `-856` (`0xFFFFFCA8`) | **100% golden match** |
 | **Element Mismatches** | 0 | 0 | 0 mismatches |
 | **Simulator Errors** | 0 | 0 | Clean execution |
 

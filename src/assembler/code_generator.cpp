@@ -33,6 +33,7 @@ static bool isVectorVVInstruction(const std::string &opcode)
            opcode == "vmulh.vv" ||
            opcode == "vmulhu.vv" ||
            opcode == "vmulhsu.vv" ||
+           opcode == "vmacc.vv" ||
            opcode == "vdiv.vv" ||
            opcode == "vdivu.vv" ||
            opcode == "vrem.vv" ||
@@ -111,6 +112,7 @@ bool isVectorVXInstruction(const std::string &opcode)
            opcode == "vmulh.vx" ||
            opcode == "vmulhu.vx" ||
            opcode == "vmulhsu.vx" ||
+           opcode == "vmacc.vx" ||
            opcode == "vdiv.vx" ||
            opcode == "vdivu.vx" ||
            opcode == "vrem.vx" ||
@@ -165,8 +167,16 @@ printIntermediateCode(const std::vector<std::pair<ICUnit, bool>> &IntermediateCo
         }
         else if (isVectorVVInstruction(block.getOpcode()))
         {
-            code = block.getOpcode() + " " + block.getRd() + ", " +
-                block.getRs2() + ", " + block.getRs1();
+            if (block.getOpcode() == "vmacc.vv")
+            {
+                code = block.getOpcode() + " " + block.getRd() + ", " +
+                    block.getRs1() + ", " + block.getRs2();
+            }
+            else
+            {
+                code = block.getOpcode() + " " + block.getRd() + ", " +
+                    block.getRs2() + ", " + block.getRs1();
+            }
         }
         else if (isVectorReductionInstruction(block.getOpcode()))
         {
@@ -179,8 +189,16 @@ printIntermediateCode(const std::vector<std::pair<ICUnit, bool>> &IntermediateCo
         }
         else if (isVectorVXInstruction(block.getOpcode()))
         {
-            code = block.getOpcode() + " " + block.getRd() + ", " +
-                block.getRs2() + ", " + block.getRs1();
+            if (block.getOpcode() == "vmacc.vx")
+            {
+                code = block.getOpcode() + " " + block.getRd() + ", " +
+                    block.getRs1() + ", " + block.getRs2();
+            }
+            else
+            {
+                code = block.getOpcode() + " " + block.getRd() + ", " +
+                    block.getRs2() + ", " + block.getRs1();
+            }
         }
         else if (isVectorVIInstruction(block.getOpcode()))
         {
@@ -269,6 +287,8 @@ uint32_t generateVectorVVTypeMachineCode(const ICUnit &block)
         funct6 = 0b100110;
     else if (opcode == "vmulh.vv")
         funct6 = 0b100111;
+    else if (opcode == "vmacc.vv")
+        funct6 = 0b101101;
     else if (opcode == "vdivu.vv")
         funct6 = 0b100000;
     else if (opcode == "vdiv.vv")
@@ -310,6 +330,7 @@ uint32_t generateVectorVVTypeMachineCode(const ICUnit &block)
     const bool is_opmvv =
         (opcode == "vmul.vv" || opcode == "vmulh.vv" ||
          opcode == "vmulhu.vv" || opcode == "vmulhsu.vv" ||
+         opcode == "vmacc.vv" ||
          opcode == "vdiv.vv" || opcode == "vdivu.vv" ||
          opcode == "vrem.vv" || opcode == "vremu.vv" ||
          opcode == "vmandn.mm" || opcode == "vmand.mm" ||
@@ -499,6 +520,8 @@ uint32_t generateVectorVXTypeMachineCode(const ICUnit &block)
         funct6 = 0b100110;
     else if (opcode == "vmulh.vx")
         funct6 = 0b100111;
+    else if (opcode == "vmacc.vx")
+        funct6 = 0b101101;
     else if (opcode == "vdivu.vx")
         funct6 = 0b100000;
     else if (opcode == "vdiv.vx")
@@ -534,6 +557,7 @@ uint32_t generateVectorVXTypeMachineCode(const ICUnit &block)
     const bool is_opmvx =
         (opcode == "vmul.vx" || opcode == "vmulh.vx" ||
          opcode == "vmulhu.vx" || opcode == "vmulhsu.vx" ||
+         opcode == "vmacc.vx" ||
          opcode == "vdiv.vx" || opcode == "vdivu.vx" ||
          opcode == "vrem.vx" || opcode == "vremu.vx");
     const uint32_t funct3 = is_opmvx ? 0b110 : 0b100;

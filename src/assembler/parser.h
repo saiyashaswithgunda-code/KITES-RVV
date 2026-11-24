@@ -132,6 +132,7 @@ class Parser
     bool parse_vector_vv();
     bool parse_vector_v();
     bool parse_vector_vx();
+    bool parse_vector_vx_macc();
     bool parse_vector_vi();
     bool parse_vector_memory();
     bool parse_vector_strided_memory();

@@ -359,6 +359,11 @@ void Parser::parseTextDirective()
                     valid_syntax = parse_vector_vx();
                     break;
                 }
+                case instruction_set::SyntaxType::O_VREG_C_GPR_C_VREG:
+                {
+                    valid_syntax = parse_vector_vx_macc();
+                    break;
+                }
                 case instruction_set::SyntaxType::O_VREG_C_VREG_C_I:
                 {
                     valid_syntax = parse_vector_vi();

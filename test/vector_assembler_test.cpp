@@ -1209,5 +1209,105 @@ TEST(VectorAssemblerTest, RejectsMaskedSyntaxForNonReductionInstructions)
 
     std::istringstream s5("vdiv.vv v1, v2, v3, v0.t\n");
     EXPECT_THROW(Kites::assemble(s5), std::runtime_error);
+
+    // vmacc.vv with mask operand must also be rejected due to existing KITES assembler limitation
+    std::istringstream s6("vmacc.vv v1, v2, v3, v0.t\n");
+    EXPECT_THROW(Kites::assemble(s6), std::runtime_error);
+
+    // vmacc.vx with mask operand must also be rejected
+    std::istringstream s7("vmacc.vx v1, x2, v3, v0.t\n");
+    EXPECT_THROW(Kites::assemble(s7), std::runtime_error);
+}
+
+TEST(VectorAssemblerTest, EncodesVmaccVVCorrectly)
+{
+    // vmacc.vv v1, v2, v3 -> funct6=101101, funct3=010, vd=1, vs1=2, vs2=3 -> 0xB63120D7
+    EXPECT_EQ(
+        assembleVectorVV("vmacc.vv v1, v2, v3\n"),
+        0xB63120D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVmaccVXCorrectly)
+{
+    // vmacc.vx v1, x2, v3 -> funct6=101101, funct3=110, vd=1, rs1=2, vs2=3 -> 0xB63160D7
+    EXPECT_EQ(
+        assembleVectorVX("vmacc.vx v1, x2, v3\n"),
+        0xB63160D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVmaccVXWithAbiNames)
+{
+    // a0 is x10 -> rs1 = 10 -> 0xB63560D7
+    EXPECT_EQ(
+        assembleVectorVX("vmacc.vx v1, a0, v3\n"),
+        0xB63560D7u
+    );
+}
+
+TEST(VectorAssemblerTest, EncodesVmaccBoundaryRegisters)
+{
+    // vmacc.vv v0, v0, v0 -> 0xB6002057
+    EXPECT_EQ(
+        assembleVectorVV("vmacc.vv v0, v0, v0\n"),
+        0xB6002057u
+    );
+
+    // vmacc.vx v0, x0, v0 -> 0xB6006057
+    EXPECT_EQ(
+        assembleVectorVX("vmacc.vx v0, x0, v0\n"),
+        0xB6006057u
+    );
+
+    // vmacc.vv v31, v31, v31 -> 0xB7FFAFD7
+    EXPECT_EQ(
+        assembleVectorVV("vmacc.vv v31, v31, v31\n"),
+        0xB7FFAFD7u
+    );
+
+    // vmacc.vx v31, x31, v31 -> 0xB7FFEFD7
+    EXPECT_EQ(
+        assembleVectorVX("vmacc.vx v31, x31, v31\n"),
+        0xB7FFEFD7u
+    );
+}
+
+TEST(VectorAssemblerTest, ReconstructsDisassemblyForVmacc)
+{
+    Kites::setupVmStateDirectory();
+
+    const std::string source =
+        "vmacc.vv v1, v2, v3\n"
+        "vmacc.vx v4, x5, v6\n";
+
+    std::istringstream stream(source);
+    Kites::AssembledProgram program = Kites::assemble(stream);
+
+    auto disassembled = Kites::printIntermediateCode(program.intermediate_code);
+    ASSERT_EQ(disassembled.size(), 2u);
+
+    EXPECT_EQ(disassembled[0], "vmacc.vv v1, v2, v3");
+    EXPECT_EQ(disassembled[1], "vmacc.vx v4, x5, v6");
+}
+
+TEST(VectorAssemblerTest, RejectsInvalidVmaccSyntax)
+{
+    Kites::setupVmStateDirectory();
+
+    // vmacc.vx with inverted operand types (v2, x3 instead of rs1, vs2)
+    std::istringstream s1("vmacc.vx v1, v2, x3\n");
+    EXPECT_THROW(Kites::assemble(s1), std::runtime_error);
+
+    // vmacc.vi immediate form does not exist in RVV 1.0
+    std::istringstream s2("vmacc.vi v1, v2, 3\n");
+    EXPECT_THROW(Kites::assemble(s2), std::runtime_error);
+
+    // Out-of-bounds registers
+    std::istringstream s3("vmacc.vv v32, v1, v2\n");
+    EXPECT_THROW(Kites::assemble(s3), std::runtime_error);
+
+    std::istringstream s4("vmacc.vx v1, x32, v2\n");
+    EXPECT_THROW(Kites::assemble(s4), std::runtime_error);
 }
 

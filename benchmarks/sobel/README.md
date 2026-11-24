@@ -58,20 +58,28 @@ riscv64-elf-gcc -ffreestanding -DBAREMETAL -march=rv32imv -mabi=ilp32 -O3 -mrvv-
     -o benchmarks/sobel/compiler_output/sobel_vector_gcc.s
 ```
 
-## 7. KITES Simulation Assembly
+## 7. Vector Kernel Implementation Details (Custom RVV Kernel)
 Standalone, self-contained KITES assembly files are provided in [`kites_assembly/`](kites_assembly/):
 - **Scalar Assembly:** [`sobel_scalar_kites.s`](kites_assembly/sobel_scalar_kites.s)
 - **Vector Assembly:** [`sobel_vector_kites.s`](kites_assembly/sobel_vector_kites.s)
 
-### Vector Kernel Adaptation Details:
-1. **Handling Lack of Widening/Narrowing Operations:** GCC emitted widening operations (`vwaddu`, `vwsubu`), narrowing shifts (`vnsrl`), and fractional LMUL (`mf2`). KITES strictly supports single-width operations at `LMUL=m1`. To execute within KITES constraints, interior pixels are processed in 4-pixel chunks using 32-bit vector registers (`SEW=32`, `LMUL=m1`, 4 elements/reg) with software byte-to-word unpack and pack routines.
+### Motivation for Custom Implementation:
+GCC auto-vectorization generated vector code relying on instructions and fractional register groupings not supported by KITES:
+- Widening integer additions/subtractions (`vwaddu.vv`, `vwsubu.vv`).
+- Narrowing integer logical right shifts (`vnsrl.wi`).
+- Fractional LMUL configurations (`mf2`).
+
+Because these instructions are outside KITES's implemented RVV subset, the compiler-generated vector assembly could not be executed directly. A custom hand-written RVV replacement kernel was developed, strictly conforming to single-width operations at `LMUL=m1`.
+
+### Vector Kernel Design Highlights:
+1. **Handling Lack of Widening/Narrowing Operations:** To execute within KITES constraints (`SEW=32`, `LMUL=m1`), interior pixels are processed in 4-pixel chunks using 32-bit vector registers with software byte-to-word unpack and pack routines.
 2. **Zero-Border Initialization:** Output image buffer is initialized in only 192 instructions using `vse8.v` with `LMUL=m1`, satisfying the zero-border policy before stencil calculation.
 3. **In-Register Vector Gradient Arithmetic:**
    - Gradients $G_x$ and $G_y$ are computed across 4 pixels simultaneously using `vsub.vv`, `vsll.vi`, and `vadd.vv`.
    - Absolute values $|G_x|, |G_y|$ are computed in-register using `vrsub.vi` and `vmax.vv`.
    - $L_1$ norm magnitude ($|G_x| + |G_y|$) is computed using `vadd.vv`.
    - Saturation clamping to 255 is performed in vector registers via unsigned minimum `vminu.vx`.
-4. **Syntax Normalization:** Stripped leading dots from branch labels, normalized vector memory syntax from `0(rs1)` to `(rs1)`, and removed unsupported directives.
+4. **Syntax Normalization:** Conforms to KITES assembly syntax (undotted labels, unit-stride addressing `(rs1)`, no unsupported directives).
 
 ### Execution Commands:
 ```bash
@@ -84,7 +92,7 @@ build/cli/kites-cli benchmarks/sobel/kites_assembly/sobel_vector_kites.s --mem-d
 
 ## 8. Simulation Results & Verification
 
-Simulation metrics extracted from hardware execution steps and recorded in [`results/execution_summary.json`](results/execution_summary.json):
+Simulation metrics extracted from simulator execution steps and recorded in [`results/execution_summary.json`](results/execution_summary.json):
 
 | Metric | Scalar (RV32IM) | Vector (RV32IMV) | Reduction / Speedup |
 | :--- | :---: | :---: | :---: |

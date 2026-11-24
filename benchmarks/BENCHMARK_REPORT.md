@@ -14,7 +14,7 @@ This report documents the empirical evaluation of the RISC-V Vector Extension (R
 3. **Integer FIR Digital Filter (256 signal samples, 16 symmetric filter taps)**
 4. **Sobel Image Edge Detection ($32 \times 32$ grayscale image, 1024 pixels)**
 
-All workloads were implemented as self-contained canonical C references, compiled with `riscv64-elf-gcc` at `-O3`, adapted for the KITES instruction subset, and executed in the simulator. Every run achieved **100% bit-for-bit output match** against precomputed golden reference vectors and completed with **zero simulator errors**.
+All workloads were implemented as self-contained canonical C references, compiled with `riscv64-elf-gcc` at `-O3`, targeted to the KITES instruction subset, and executed in the simulator. For dot product, the vector kernel was adapted directly from compiler output. For matrix multiplication, FIR filtering, and Sobel edge detection, GCC generated instructions outside KITES's implemented subset (`vmv.v.x`, `vrgather.vv`, widening/narrowing arithmetic, and fractional LMULs), so custom hand-written RVV kernels conforming strictly to KITES constraints (`LMUL=m1` and supported instructions) were implemented. For FIR filtering, the hand-written kernel also restructured the loop hierarchy from an inner-product reduction across taps to an outer-product accumulation over samples using `vmacc.vx`. Every run achieved **100% bit-for-bit output match** against precomputed golden reference vectors and completed with **zero simulator errors**.
 
 ### Key Findings:
 - **Substantial Computational Kernel Speedup:** Vectorization achieves up to **$3.07\times$ speedup** ($67.46\%$ dynamic instruction reduction) on dot product, **$2.90\times$ speedup** ($65.52\%$ reduction) on FIR digital filtering, and **$2.36\times$ speedup** ($57.57\%$ reduction) on matrix multiplication.
@@ -48,9 +48,9 @@ The charts below visualize dynamic instruction counts, acceleration factors, and
 ![Instruction Counts Comparison](visualizations/instruction_counts_comparison.png)
 *(Vector SVG: [`visualizations/instruction_counts_comparison.svg`](visualizations/instruction_counts_comparison.svg))*
 
-### 3.2 Speedup Ratio & Dynamic Instruction Reduction
-![Speedup and Reduction](visualizations/speedup_and_reduction.png)
-*(Vector SVG: [`visualizations/speedup_and_reduction.svg`](visualizations/speedup_and_reduction.svg))*
+### 3.2 Kernel Speedup Ratio
+![Kernel Speedup](visualizations/kernel_speedup.png)
+*(Vector SVG: [`visualizations/kernel_speedup.svg`](visualizations/kernel_speedup.svg))*
 
 ### 3.3 Instruction Decomposition (Kernel vs. Harness)
 ![Instruction Breakdown](visualizations/instruction_breakdown.png)
@@ -62,7 +62,7 @@ The charts below visualize dynamic instruction counts, acceleration factors, and
 
 ### 4.1 Integer Dot Product (`dot_product`)
 - **Kernel:** $\text{sum} = \sum_{i=0}^{N-1} a[i] \cdot b[i]$ ($N = 256$, `int32_t`).
-- **Scalar Execution:** Unrolled loop running 256 iterations. Each iteration performs two memory loads (`lw`), two pointer increments (`addi`), one 32-bit integer multiplication (`mul`), one accumulator addition (`add`), and a branch (`bne`). Total kernel instructions: **1,798**.
+- **Scalar Execution:** Plain 7-instruction loop running 256 iterations. Each iteration performs two memory loads (`lw`), two pointer increments (`addi`), one 32-bit integer multiplication (`mul`), one accumulator addition (`add`), and a branch (`bne`). Total kernel instructions: **1,798**.
 - **Vector Execution:** Evaluated with $\text{SEW}=32, \text{LMUL}=\text{m1}$, processing 4 elements per vector register. The vector loop retires in 64 iterations, streaming data with unit-stride vector loads (`vle32.v`) and fusing multiply-accumulate directly with **`vmacc.vv`**. Accumulator vector reduction is executed once at kernel completion with `vredsum.vs`. Total kernel instructions: **585**.
 - **Performance Impact:** Dynamic instructions reduced by **$67.46\%$**, yielding a **$3.07\times$ speedup**.
 
@@ -71,7 +71,7 @@ The charts below visualize dynamic instruction counts, acceleration factors, and
 ### 4.2 Integer Matrix Multiplication (`matrix_multiplication`)
 - **Kernel:** $C = A \times B$ ($16 \times 16$, 256 elements, `int32_t`).
 - **Loop Scheduling:** Arranged in contiguous $i$-$k$-$j$ order. For each row $i$ and index $k$, scalar element $A[i \times N + k]$ acts as a constant multiplier across row vector $B[k, :]$, accumulating into row vector $C[i, :]$.
-- **Scalar Execution:** GCC unrolled the innermost scalar loop by 2. Total kernel instructions: **29,772**.
+- **Scalar Execution:** GCC unrolled the middle $k$ loop by a factor of 2 and fused both product accumulations into the inner $j$ loop. Total kernel instructions: **29,772**.
 - **Vector Execution:** Matrix $C$ is cleared in 192 instructions using `vxor.vv` and `vse32.v`. Inner row updates are vectorized using **`vmacc.vx vd, rs1, vs2`**, where scalar multiplier $a_{ik}$ resides in a standard GPR and $B[k, :]$ is loaded into vector registers. All vector memory accesses are contiguous unit-stride (`vle32.v` and `vse32.v`). Total kernel instructions: **12,632**.
 - **Performance Impact:** Dynamic instructions reduced by **$57.57\%$**, yielding a **$2.36\times$ speedup**. Memory dumps confirm all 256 output elements match golden values with 0 mismatches.
 
@@ -124,4 +124,4 @@ In smaller kernels or unoptimized harnesses, non-kernel code (address setup and 
 
 ## 6. Conclusion
 
-Phase 3 concludes the KITES RVV benchmarking evaluation. The benchmark suite demonstrates that RVV 1.0 support in KITES provides significant instruction-level acceleration across classic computer architecture benchmarks ($2.2\times$ to $3.1\times$ overall speedup), with full numerical precision and simulator stability. Future architectural work should prioritize widening operations and the `vmv` instruction family.
+Phase 3 concludes the KITES RVV benchmarking evaluation. The benchmark suite demonstrates that RVV 1.0 support in KITES provides significant instruction-level acceleration across classic computer architecture benchmarks ($1.14\times$ to $3.05\times$ overall speedup, and $1.17\times$ to $3.07\times$ kernel speedup), with full numerical precision and simulator stability. Future architectural work should prioritize widening operations and the `vmv` instruction family.

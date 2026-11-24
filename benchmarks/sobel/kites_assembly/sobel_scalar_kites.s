@@ -1,5 +1,5 @@
 # Sobel Filter - Scalar RV32IM (KITES)
-# Expected checksum in a0 (x10): 53140 (0x0000CFA4)
+# Expected checksum in a0 (x10): 53140 (0x0000CF94)
 
 .data
 sobel_input_image:

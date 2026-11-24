@@ -49,17 +49,25 @@ riscv64-elf-gcc -ffreestanding -DBAREMETAL -march=rv32imv -mabi=ilp32 -O3 -mrvv-
     -o benchmarks/fir_filter/compiler_output/fir_filter_vector_gcc.s
 ```
 
-## 7. KITES Simulation Assembly
+## 7. Vector Kernel Implementation Details (Custom RVV Kernel)
 Standalone, self-contained KITES assembly files are provided in [`kites_assembly/`](kites_assembly/):
 - **Scalar Assembly:** [`fir_filter_scalar_kites.s`](kites_assembly/fir_filter_scalar_kites.s)
 - **Vector Assembly:** [`fir_filter_vector_kites.s`](kites_assembly/fir_filter_vector_kites.s)
 
-### Vector Kernel Adaptation Details:
-1. **Sample-Dimension Vectorization:** Standard compiler inner-loop vectorization across taps requires reverse indexing $x[n - k]$, which triggers unsupported vector gathers (`vrgather.vv`, `vid.v`, `vl1re32.v`). Instead, vectorization was structured along the sample dimension: for each tap $k \in [0, 15]$, a forward unit-stride vector slice is updated:
+### Motivation for Custom Implementation:
+GCC auto-vectorization across the inner tap dimension requires reverse indexing $x[n - k]$, causing the compiler to emit unsupported instructions and whole-register moves:
+- `vrgather.vv` vector register gather instructions.
+- `vid.v` index generation.
+- `vl1re32.v` whole register loads.
+
+Because these operations are outside KITES's implemented RVV subset, the compiler-generated vector assembly could not be executed directly. A custom hand-written RVV replacement kernel was developed that restructures the loop hierarchy from an inner-product reduction across taps to an outer-product tap accumulation along the sample dimension using `vmacc.vx`.
+
+### Vector Kernel Design Highlights:
+1. **Sample-Dimension Vectorization:** Instead of gathering taps across time, vectorization is structured along the sample dimension: for each tap $k \in [0, 15]$, a forward unit-stride vector slice is updated:
    $$\mathbf{y}[k \dots N-1] \mathrel{+}= \text{taps}[k] \times \mathbf{x}[0 \dots N-1-k]$$
 2. **Unit-Stride Streaming & `vmacc.vx`:** Replaced all gathers and permutations with unit-stride vector memory loads (`vle32.v`), vector multiply-accumulate with a scalar tap operand (**`vmacc.vx`**), and unit-stride vector stores (`vse32.v`). Vector length is dynamically negotiated via `vsetvli`.
 3. **Output Buffer Zeroing:** Output buffer is initialized in 192 dynamic instructions using `vxor.vv v1, v1, v1` and `vse32.v` with `LMUL=m1`.
-4. **Syntax Normalization:** Stripped leading dots from branch labels, normalized vector memory syntax from `0(rs1)` to `(rs1)`, and removed unsupported directives.
+4. **Syntax Normalization:** Conforms to KITES assembly syntax (undotted labels, unit-stride addressing `(rs1)`, no unsupported directives).
 
 ### Execution Commands:
 ```bash
@@ -72,7 +80,7 @@ build/cli/kites-cli benchmarks/fir_filter/kites_assembly/fir_filter_vector_kites
 
 ## 8. Simulation Results & Verification
 
-Simulation metrics extracted from hardware execution steps and recorded in [`results/execution_summary.json`](results/execution_summary.json):
+Simulation metrics extracted from simulator execution steps and recorded in [`results/execution_summary.json`](results/execution_summary.json):
 
 | Metric | Scalar (RV32IM) | Vector (RV32IMV) | Reduction / Speedup |
 | :--- | :---: | :---: | :---: |

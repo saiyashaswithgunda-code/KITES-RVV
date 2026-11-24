@@ -106,12 +106,14 @@ void LoadVectorProgram(
     Processor &processor,
     unsigned int sew_bits,
     unsigned int avl,
-    uint32_t vector_instruction)
+    uint32_t vector_instruction,
+    bool tail_agnostic = false,
+    bool mask_agnostic = false)
 {
     Kites::AssembledProgram program;
 
     program.text_buffer = {
-        EncodeVsetvli(sew_bits),
+        EncodeVsetvli(sew_bits, tail_agnostic, mask_agnostic),
         vector_instruction
     };
 
@@ -5111,5 +5113,568 @@ TEST(VectorArithmeticTest, MaskLogicalAndPrefixUndoRedo)
         // Redo -> re-applies 0x07
         processor.Redo();
         EXPECT_EQ(processor.registers_.ReadVregElement<uint8_t>(3, 0), 0x07);
+    }
+}
+
+// ============================================================================
+// vmacc.vv and vmacc.vx tests
+// ============================================================================
+
+namespace
+{
+
+template <typename T>
+void TestVmaccVV(
+    const std::vector<T> &vs2_vals,
+    const std::vector<T> &vs1_vals,
+    const std::vector<T> &vd_init,
+    const std::vector<T> &expected)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    // vmacc.vv vd=3, vs2=1, vs1=2, vm=1, funct3=0b010, funct6=0b101101
+    LoadVectorProgram(
+        processor,
+        sizeof(T) * 8,
+        static_cast<unsigned int>(vs2_vals.size()),
+        EncodeVectorVV(0b101101, 3, 1, 2, 1, 0b010)
+    );
+
+    WriteElements(processor.registers_, 1, vs2_vals);
+    WriteElements(processor.registers_, 2, vs1_vals);
+    WriteElements(processor.registers_, 3, vd_init);
+
+    processor.Step();
+
+    ExpectElements(processor.registers_, 3, expected);
+}
+
+template <typename T>
+void TestVmaccVX(
+    const std::vector<T> &vs2_vals,
+    uint64_t scalar_val,
+    const std::vector<T> &vd_init,
+    const std::vector<T> &expected)
+{
+    Kites::setupVmStateDirectory();
+    Processor processor;
+
+    // vmacc.vx vd=3, vs2=1, rs1=2, vm=1, funct3=0b110, funct6=0b101101
+    LoadVectorVXProgram(
+        processor,
+        sizeof(T) * 8,
+        static_cast<unsigned int>(vs2_vals.size()),
+        EncodeVectorVX(0b101101, 3, 1, 2, 1, 0b110),
+        scalar_val,
+        2
+    );
+
+    WriteElements(processor.registers_, 1, vs2_vals);
+    WriteElements(processor.registers_, 3, vd_init);
+
+    processor.Step();
+
+    ExpectElements(processor.registers_, 3, expected);
+}
+
+} // namespace
+
+TEST(VectorArithmeticTest, VmaccBasicAllSEW)
+{
+    // SEW = 8: vd[i] = vd[i] + vs1[i] * vs2[i]
+    // 100 + 10 * 2 = 120
+    // 100 + 20 * 3 = 160
+    // 100 + 30 * 4 = 220
+    // 100 + 40 * 5 = 300 = 44 mod 256
+    TestVmaccVV<uint8_t>(
+        {2, 3, 4, 5},
+        {10, 20, 30, 40},
+        {100, 100, 100, 100},
+        {120, 160, 220, 44}
+    );
+
+    // SEW = 8 (.vx): vd[i] = vd[i] + x[rs1] * vs2[i]
+    // 50 + 10 * 2 = 70
+    // 60 + 10 * 3 = 90
+    // 70 + 10 * 4 = 110
+    // 80 + 10 * 5 = 130
+    TestVmaccVX<uint8_t>(
+        {2, 3, 4, 5},
+        10,
+        {50, 60, 70, 80},
+        {70, 90, 110, 130}
+    );
+
+    // SEW = 16:
+    // 1000 + 300 * 100 = 31000
+    // 2000 + 400 * 200 = 82000 = 16464 mod 65536
+    TestVmaccVV<uint16_t>(
+        {100, 200},
+        {300, 400},
+        {1000, 2000},
+        {31000, 16464}
+    );
+    TestVmaccVX<uint16_t>(
+        {100, 200},
+        300,
+        {1000, 2000},
+        {31000, 62000}
+    );
+
+    // SEW = 32:
+    // 50000 + 30000 * 10000 = 300050000
+    // 60000 + 40000 * 20000 = 800060000
+    TestVmaccVV<uint32_t>(
+        {10000, 20000},
+        {30000, 40000},
+        {50000, 60000},
+        {300050000, 800060000}
+    );
+    TestVmaccVX<uint32_t>(
+        {10000, 20000},
+        30000,
+        {50000, 60000},
+        {300050000, 600060000}
+    );
+
+    // SEW = 64:
+    TestVmaccVV<uint64_t>(
+        {0x100000000ULL, 2},
+        {0x200000000ULL, 3},
+        {10, 20},
+        {10, 26} // 0x200000000ULL * 0x100000000ULL = 2^65 = 0 mod 2^64 -> 0 + 10 = 10
+    );
+    TestVmaccVX<uint64_t>(
+        {3, 4},
+        0x100000000ULL,
+        {1, 2},
+        {0x300000001ULL, 0x400000002ULL}
+    );
+}
+
+TEST(VectorArithmeticTest, VmaccPositiveAndNegativeOperands)
+{
+    // SEW = 8: (-5) * 10 + 100 = -50 + 100 = 50
+    TestVmaccVV<uint8_t>(
+        {10},
+        {static_cast<uint8_t>(-5)},
+        {100},
+        {50}
+    );
+
+    // SEW = 8: (-5) * (-6) + (-40) = 30 - 40 = -10 (0xF6)
+    TestVmaccVV<uint8_t>(
+        {static_cast<uint8_t>(-6)},
+        {static_cast<uint8_t>(-5)},
+        {static_cast<uint8_t>(-40)},
+        {static_cast<uint8_t>(-10)}
+    );
+
+    // SEW = 16: (-1000) * 50 + 60000 = -50000 + 60000 = 10000
+    TestVmaccVV<uint16_t>(
+        {50},
+        {static_cast<uint16_t>(-1000)},
+        {60000},
+        {10000}
+    );
+
+    // SEW = 32: (-200000) * 300 + 100000000 = -60000000 + 100000000 = 40000000
+    TestVmaccVV<uint32_t>(
+        {300},
+        {static_cast<uint32_t>(-200000)},
+        {100000000},
+        {40000000}
+    );
+
+    // SEW = 64: (-1) * 100 + 50 = -50
+    TestVmaccVV<uint64_t>(
+        {100},
+        {static_cast<uint64_t>(-1LL)},
+        {50},
+        {static_cast<uint64_t>(-50LL)}
+    );
+
+    // .vx with negative scalar:
+    // SEW = 8: 10 + (-5) * 4 = 10 - 20 = -10 (0xF6)
+    TestVmaccVX<uint8_t>(
+        {4},
+        static_cast<uint64_t>(-5LL),
+        {10},
+        {static_cast<uint8_t>(-10)}
+    );
+
+    // SEW = 32: 200 + (-1000) * 20 = 200 - 20000 = -19800
+    TestVmaccVX<uint32_t>(
+        {20},
+        static_cast<uint64_t>(-1000LL),
+        {200},
+        {static_cast<uint32_t>(-19800)}
+    );
+}
+
+TEST(VectorArithmeticTest, VmaccOverflowAndUnderflowWraparound)
+{
+    // SEW = 8 unsigned overflow: 200 * 2 + 100 = 500 = 244 (0xF4)
+    TestVmaccVV<uint8_t>(
+        {2},
+        {200},
+        {100},
+        {244}
+    );
+
+    // SEW = 16 overflow: 0x8000 * 2 + 1 = 0x10000 + 1 = 1 mod 2^16
+    TestVmaccVV<uint16_t>(
+        {2},
+        {0x8000},
+        {1},
+        {1}
+    );
+
+    // SEW = 32 overflow: 0x80000000 * 2 + 5 = 5 mod 2^32
+    TestVmaccVV<uint32_t>(
+        {2},
+        {0x80000000},
+        {5},
+        {5}
+    );
+
+    // SEW = 64 wraparound: 0x8000000000000000ULL * 2 + 0x123456789ABCDEF0ULL = 0x123456789ABCDEF0ULL
+    TestVmaccVV<uint64_t>(
+        {2},
+        {0x8000000000000000ULL},
+        {0x123456789ABCDEF0ULL},
+        {0x123456789ABCDEF0ULL}
+    );
+}
+
+TEST(VectorArithmeticTest, VmaccPartialVectorLength)
+{
+    // SEW = 32, VLMAX = 4. Set avl = 2 (vl = 2 < VLMAX)
+    // Test 1: tail-undisturbed (ta = false)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorProgram(processor, 32, 2, EncodeVectorVV(0b101101, 3, 1, 2, 1, 0b010), false, false);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {10, 20, 30, 40});
+        WriteElements<uint32_t>(processor.registers_, 2, {2, 3, 4, 5});
+        WriteElements<uint32_t>(processor.registers_, 3, {100, 200, 300, 400});
+
+        processor.Step();
+
+        // Elements 0, 1: active -> 100 + 2 * 10 = 120, 200 + 3 * 20 = 260
+        // Elements 2, 3: tail undisturbed -> retain 300, 400
+        ExpectElements<uint32_t>(processor.registers_, 3, {120, 260, 300, 400});
+    }
+
+    // Test 2: tail-agnostic (ta = true) -> tail elements filled with 1s (0xFFFFFFFF)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorProgram(processor, 32, 2, EncodeVectorVV(0b101101, 3, 1, 2, 1, 0b010), true, false);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {10, 20, 30, 40});
+        WriteElements<uint32_t>(processor.registers_, 2, {2, 3, 4, 5});
+        WriteElements<uint32_t>(processor.registers_, 3, {100, 200, 300, 400});
+
+        processor.Step();
+
+        // Elements 0, 1: active -> 120, 260
+        // Elements 2, 3: tail agnostic -> 0xFFFFFFFF
+        ExpectElements<uint32_t>(processor.registers_, 3, {120, 260, 0xFFFFFFFF, 0xFFFFFFFF});
+    }
+}
+
+TEST(VectorArithmeticTest, VmaccNonzeroVstart)
+{
+    // Test 1: 0 < vstart < vl
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorProgram(processor, 32, 4, EncodeVectorVV(0b101101, 3, 1, 2, 1, 0b010));
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 2);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {10, 20, 30, 40});
+        WriteElements<uint32_t>(processor.registers_, 2, {2, 3, 4, 5});
+        WriteElements<uint32_t>(processor.registers_, 3, {100, 200, 300, 400});
+
+        processor.Step();
+
+        // Elements 0, 1: prestart undisturbed -> retain 100, 200
+        // Elements 2, 3: active -> 300 + 4 * 30 = 420, 400 + 5 * 40 = 600
+        // vstart reset to 0
+        ExpectElements<uint32_t>(processor.registers_, 3, {100, 200, 420, 600});
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+
+    // Test 2: vstart == vl -> no elements executed, destination undisturbed, vstart reset to 0
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorProgram(processor, 32, 2, EncodeVectorVV(0b101101, 3, 1, 2, 1, 0b010), true, false);
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 2);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {10, 20, 30, 40});
+        WriteElements<uint32_t>(processor.registers_, 2, {2, 3, 4, 5});
+        WriteElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+
+        processor.Step();
+
+        ExpectElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+
+    // Test 3: vstart > vl -> no elements executed, destination unchanged, vstart reset to 0
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorProgram(processor, 32, 2, EncodeVectorVV(0b101101, 3, 1, 2, 1, 0b010));
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 3);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {10, 20, 30, 40});
+        WriteElements<uint32_t>(processor.registers_, 2, {2, 3, 4, 5});
+        WriteElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+
+        processor.Step();
+
+        ExpectElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+}
+
+TEST(VectorArithmeticTest, VmaccMaskingAndPolicies)
+{
+    // NOTE: Masked execution is tested via raw machine encodings with vm = 0.
+    // The KITES assembler currently restricts masked syntax (', v0.t') to reduction,
+    // prefix, and strided memory instructions; this is an existing simulator assembler limitation.
+
+    // Test 1: vm = 0 with mask-undisturbed (vma = false)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vmacc.vv v3, v1, v2 with vm = 0 (masked), ta = false, ma = false
+        LoadVectorProgram(processor, 32, 4, EncodeVectorVV(0b101101, 3, 1, 2, 0, 0b010), false, false);
+
+        // Mask in v0: bit 0 = 1, bit 1 = 0, bit 2 = 1, bit 3 = 0 -> 0b00000101
+        processor.registers_.WriteVregElement<uint8_t>(0, 0, 0b00000101);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {10, 20, 30, 40}); // vs2
+        WriteElements<uint32_t>(processor.registers_, 2, {2, 3, 4, 5});     // vs1
+        WriteElements<uint32_t>(processor.registers_, 3, {100, 200, 300, 400}); // vd initial
+
+        processor.Step();
+
+        // Element 0: active -> 100 + 2 * 10 = 120
+        // Element 1: masked-off, mu -> retains 200
+        // Element 2: active -> 300 + 4 * 30 = 420
+        // Element 3: masked-off, mu -> retains 400
+        ExpectElements<uint32_t>(processor.registers_, 3, {120, 200, 420, 400});
+    }
+
+    // Test 2: vm = 0 with mask-agnostic (vma = true) -> inactive elements filled with 1s
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vmacc.vx v3, v1, x2 with vm = 0 (masked), ta = false, ma = true
+        LoadVectorVXProgram(processor, 32, 4, EncodeVectorVX(0b101101, 3, 1, 2, 0, 0b110), 3, 2, false, true);
+
+        // Mask in v0: bit 0 = 0, bit 1 = 1, bit 2 = 0, bit 3 = 1 -> 0b00001010
+        processor.registers_.WriteVregElement<uint8_t>(0, 0, 0b00001010);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {10, 20, 30, 40}); // vs2
+        WriteElements<uint32_t>(processor.registers_, 3, {100, 200, 300, 400}); // vd initial
+
+        processor.Step();
+
+        // Element 0: inactive, ma -> 0xFFFFFFFF
+        // Element 1: active -> 200 + 3 * 20 = 260
+        // Element 2: inactive, ma -> 0xFFFFFFFF
+        // Element 3: active -> 400 + 3 * 40 = 520
+        ExpectElements<uint32_t>(processor.registers_, 3, {0xFFFFFFFF, 260, 0xFFFFFFFF, 520});
+    }
+}
+
+TEST(VectorArithmeticTest, VmaccRegisterOverlap)
+{
+    // Test 1: vd == vs1 (vmacc.vv v1, v2, v1 -> vd=1, vs2=2, vs1=1)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // EncodeVectorVV(funct6=0b101101, vd=1, vs2=2, vs1=1, vm=1, funct3=0b010)
+        LoadVectorProgram(processor, 32, 4, EncodeVectorVV(0b101101, 1, 2, 1, 1, 0b010));
+
+        WriteElements<uint32_t>(processor.registers_, 1, {10, 20, 30, 40}); // vd and vs1
+        WriteElements<uint32_t>(processor.registers_, 2, {2, 3, 4, 5});     // vs2
+
+        processor.Step();
+
+        // vd[i] = vd[i] + vs1[i] * vs2[i] = 10 + 10 * 2 = 30, 20 + 20 * 3 = 80, ...
+        ExpectElements<uint32_t>(processor.registers_, 1, {30, 80, 150, 240});
+    }
+
+    // Test 2: vd == vs2 (vmacc.vv v1, v1, v2 -> vd=1, vs2=1, vs1=2)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // EncodeVectorVV(funct6=0b101101, vd=1, vs2=1, vs1=2, vm=1, funct3=0b010)
+        LoadVectorProgram(processor, 32, 4, EncodeVectorVV(0b101101, 1, 1, 2, 1, 0b010));
+
+        WriteElements<uint32_t>(processor.registers_, 1, {10, 20, 30, 40}); // vd and vs2
+        WriteElements<uint32_t>(processor.registers_, 2, {2, 3, 4, 5});     // vs1
+
+        processor.Step();
+
+        // vd[i] = vd[i] + vs1[i] * vs2[i] = 10 + 2 * 10 = 30, ...
+        ExpectElements<uint32_t>(processor.registers_, 1, {30, 80, 150, 240});
+    }
+
+    // Test 3: vd == vs1 == vs2 (all three registers overlap)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vmacc.vv v1, v1, v1
+        LoadVectorProgram(processor, 32, 4, EncodeVectorVV(0b101101, 1, 1, 1, 1, 0b010));
+
+        WriteElements<uint32_t>(processor.registers_, 1, {2, 3, 4, 5});
+
+        processor.Step();
+
+        // vd[i] = x + x * x -> 2 + 4 = 6, 3 + 9 = 12, 4 + 16 = 20, 5 + 25 = 30
+        ExpectElements<uint32_t>(processor.registers_, 1, {6, 12, 20, 30});
+    }
+
+    // Test 4: vd == v0 under UNMASKED execution (vm = 1)
+    // Per RVV 1.0, vd = v0 is valid when unmasked (reserved when masked).
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorProgram(processor, 32, 4, EncodeVectorVV(0b101101, 0, 1, 2, 1, 0b010));
+
+        WriteElements<uint32_t>(processor.registers_, 1, {2, 3, 4, 5});     // vs2
+        WriteElements<uint32_t>(processor.registers_, 2, {10, 20, 30, 40}); // vs1
+        WriteElements<uint32_t>(processor.registers_, 0, {1, 1, 1, 1});     // vd (v0)
+
+        processor.Step();
+
+        // 1 + 10 * 2 = 21, 1 + 20 * 3 = 61, 1 + 30 * 4 = 121, 1 + 40 * 5 = 201
+        ExpectElements<uint32_t>(processor.registers_, 0, {21, 61, 121, 201});
+    }
+}
+
+TEST(VectorArithmeticTest, VmaccScalarOperandHandling)
+{
+    // 1. Scalar operand from x0 (always zero)
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        // vmacc.vx v3, v1, x0 (vd=3, vs2=1, rs1=0)
+        LoadVectorVXProgram(processor, 32, 4, EncodeVectorVX(0b101101, 3, 1, 0, 1, 0b110), 9999, 0);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {10, 20, 30, 40});
+        WriteElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+
+        processor.Step();
+
+        // vd[i] = vd[i] + 0 * vs2[i] = vd[i] (unchanged)
+        ExpectElements<uint32_t>(processor.registers_, 3, {77, 88, 99, 111});
+    }
+
+    // 2. High bits beyond SEW in scalar register (verifying truncation to active SEW)
+    // In KITES, XLEN is 64. For SEW < 64, high bits must be ignored.
+    {
+        // SEW = 8: scalar has high bits 0x1122334455667705 -> low 8 bits = 5
+        TestVmaccVX<uint8_t>(
+            {10, 20},
+            0x1122334455667705ULL,
+            {100, 100},
+            {150, 200}
+        );
+
+        // SEW = 16: scalar has high bits 0xAABBCCDD00000003 -> low 16 bits = 3
+        TestVmaccVX<uint16_t>(
+            {100, 200},
+            0xAABBCCDD00000003ULL,
+            {1000, 1000},
+            {1300, 1600}
+        );
+
+        // SEW = 32: scalar has high bits 0xDEADBEEF00000004 -> low 32 bits = 4
+        TestVmaccVX<uint32_t>(
+            {1000, 2000},
+            0xDEADBEEF00000004ULL,
+            {10, 20},
+            {4010, 8020}
+        );
+    }
+}
+
+TEST(VectorArithmeticTest, VmaccUndoRedoFidelity)
+{
+    // Step, Undo, and Redo for vmacc.vv
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorProgram(processor, 32, 4, EncodeVectorVV(0b101101, 3, 1, 2, 1, 0b010));
+
+        WriteElements<uint32_t>(processor.registers_, 1, {10, 20, 30, 40});
+        WriteElements<uint32_t>(processor.registers_, 2, {2, 3, 4, 5});
+        WriteElements<uint32_t>(processor.registers_, 3, {100, 200, 300, 400});
+
+        processor.registers_.WriteCsr(RegisterFile::CSR_VSTART, 1);
+
+        processor.Step(); // executes vmacc.vv with vstart=1
+
+        // Element 0: prestart undisturbed -> 100
+        // Elements 1..3: active -> 260, 420, 600
+        // vstart reset to 0
+        ExpectElements<uint32_t>(processor.registers_, 3, {100, 260, 420, 600});
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+
+        // Undo -> destination restored to {100, 200, 300, 400}, vstart restored to 1
+        processor.Undo();
+        ExpectElements<uint32_t>(processor.registers_, 3, {100, 200, 300, 400});
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 1u);
+
+        // Redo -> re-applies post-step state
+        processor.Redo();
+        ExpectElements<uint32_t>(processor.registers_, 3, {100, 260, 420, 600});
+        EXPECT_EQ(processor.registers_.ReadCsr(RegisterFile::CSR_VSTART), 0u);
+    }
+
+    // Step, Undo, and Redo for vmacc.vx
+    {
+        Kites::setupVmStateDirectory();
+        Processor processor;
+
+        LoadVectorVXProgram(processor, 32, 4, EncodeVectorVX(0b101101, 3, 1, 2, 1, 0b110), 10, 2);
+
+        WriteElements<uint32_t>(processor.registers_, 1, {1, 2, 3, 4});
+        WriteElements<uint32_t>(processor.registers_, 3, {10, 20, 30, 40});
+
+        processor.Step();
+
+        ExpectElements<uint32_t>(processor.registers_, 3, {20, 40, 60, 80});
+
+        // Undo -> restores initial {10, 20, 30, 40}
+        processor.Undo();
+        ExpectElements<uint32_t>(processor.registers_, 3, {10, 20, 30, 40});
+
+        // Redo -> re-applies {20, 40, 60, 80}
+        processor.Redo();
+        ExpectElements<uint32_t>(processor.registers_, 3, {20, 40, 60, 80});
     }
 }

@@ -684,10 +684,20 @@ bool Parser::parse_vector_vv()
     block.setLineNumber(line);
     block.setInstructionIndex(instruction_index_);
 
-    // RISC-V vector operand order: vd, vs2, vs1.
-    block.setRd(peekToken(1).value);
-    block.setRs2(peekToken(3).value);
-    block.setRs1(peekToken(5).value);
+    if (block.getOpcode() == "vmacc.vv")
+    {
+        // RVV 1.0 multiply-accumulate operand order: vd, vs1, vs2.
+        block.setRd(peekToken(1).value);
+        block.setRs1(peekToken(3).value);
+        block.setRs2(peekToken(5).value);
+    }
+    else
+    {
+        // RISC-V vector operand order: vd, vs2, vs1.
+        block.setRd(peekToken(1).value);
+        block.setRs2(peekToken(3).value);
+        block.setRs1(peekToken(5).value);
+    }
 
     // Check optional mask: , v0.t (only permitted for the 8 reduction instructions)
     if (peekToken(6).type == TokenType::COMMA &&
@@ -796,6 +806,44 @@ bool Parser::parse_vector_vx()
     block.setRd(peekToken(1).value);
     block.setRs2(peekToken(3).value);
     block.setRs1(reg_alias_to_name.at(peekToken(5).value));
+
+    skipCurrentLine();
+
+    intermediate_code_.emplace_back(block, true);
+    instruction_number_line_number_mapping_[instruction_index_] = line;
+    instruction_index_++;
+
+    return true;
+}
+
+bool Parser::parse_vector_vx_macc()
+{
+    const unsigned int line = currentToken().line_number;
+
+    // Validate: instruction vd, rs1, vs2
+    if (peekToken(1).line_number != line ||
+        peekToken(1).type != TokenType::VEC_REGISTER ||
+        peekToken(2).type != TokenType::COMMA ||
+        peekToken(3).line_number != line ||
+        peekToken(3).type != TokenType::GP_REGISTER ||
+        peekToken(4).type != TokenType::COMMA ||
+        peekToken(5).line_number != line ||
+        peekToken(5).type != TokenType::VEC_REGISTER ||
+        (peekToken(6).type != TokenType::EOF_ &&
+         peekToken(6).line_number == line))
+    {
+        return false;
+    }
+
+    ICUnit block;
+    block.setOpcode(currentToken().value);
+    block.setLineNumber(line);
+    block.setInstructionIndex(instruction_index_);
+
+    // RVV 1.0 vector-scalar multiply-accumulate operand order: vd, rs1, vs2.
+    block.setRd(peekToken(1).value);
+    block.setRs1(reg_alias_to_name.at(peekToken(3).value));
+    block.setRs2(peekToken(5).value);
 
     skipCurrentLine();
 

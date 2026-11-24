@@ -221,7 +221,8 @@ void RVSSProcessor::Execute()
         else if (funct6 == 0b100100 || funct6 == 0b100101 ||
                  funct6 == 0b100110 || funct6 == 0b100111 ||
                  funct6 == 0b100000 || funct6 == 0b100001 ||
-                 funct6 == 0b100010 || funct6 == 0b100011)
+                 funct6 == 0b100010 || funct6 == 0b100011 ||
+                 funct6 == 0b101101)
         {
             ExecuteVectorArithmetic();
         }
@@ -605,6 +606,7 @@ void RVSSProcessor::ExecuteVectorArithmetic()
         case 0b100101: // vmul.vv
         case 0b100110: // vmulhsu.vv
         case 0b100111: // vmulh.vv
+        case 0b101101: // vmacc.vv
             break;
 
         default:
@@ -623,6 +625,7 @@ void RVSSProcessor::ExecuteVectorArithmetic()
         case 0b100101: // vmul.vx
         case 0b100110: // vmulhsu.vx
         case 0b100111: // vmulh.vx
+        case 0b101101: // vmacc.vx
             break;
 
         default:
@@ -1144,6 +1147,14 @@ void RVSSProcessor::ExecuteVectorArithmetic()
             case 0b100111: // vmulh
                 result = multiply_high_signed(a, b, config.sew_bits);
                 break;
+
+            case 0b101101: // vmacc
+            {
+                const uint64_t old_d =
+                    read_element(vector_old_value_, i, element_bytes);
+                result = (old_d + (a * b)) & element_mask;
+                break;
+            }
             }
         }
         else
@@ -2468,7 +2479,8 @@ void RVSSProcessor::WriteBack()
                  funct6 == 0b100100 || funct6 == 0b100101 ||
                  funct6 == 0b100110 || funct6 == 0b100111 ||
                  funct6 == 0b100000 || funct6 == 0b100001 ||
-                 funct6 == 0b100010 || funct6 == 0b100011)
+                 funct6 == 0b100010 || funct6 == 0b100011 ||
+                 funct6 == 0b101101)
         {
             WriteBackVectorArithmetic();
         }

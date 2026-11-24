@@ -6,7 +6,7 @@ This benchmark suite provides a rigorous, reproducible framework for evaluating 
 The primary objective is to evaluate:
 - Dynamic instruction count reductions achieved by vectorization.
 - Architectural vector execution behaviors under realistic, computationally meaningful workloads.
-- Fidelity and compatibility of compiler-generated and hand-adapted RVV 1.0 assembly under KITES's implemented instruction subset and architectural constraints (`VLEN=128`, `LMUL=m1`).
+- Fidelity and compatibility of compiler-generated and hand-written RVV 1.0 assembly under KITES's implemented instruction subset and architectural constraints (`VLEN=128`, `LMUL=m1`).
 
 ---
 
@@ -41,7 +41,7 @@ benchmarks/
 ├── visualizations/                    <- Publication-ready SVG/PNG plots & generator script
 │   ├── generate_charts.py
 │   ├── instruction_counts_comparison.{svg,png}
-│   ├── speedup_and_reduction.{svg,png}
+│   ├── kernel_speedup.{svg,png}
 │   └── instruction_breakdown.{svg,png}
 ├── dot_product/
 │   ├── README.md                      <- Workload specification, math definition & expected outputs
@@ -104,14 +104,12 @@ This project followed a rigorous, three-phase workflow. All phases are complete:
 - Compiled canonical C references into scalar RV32IM assembly using `riscv64-elf-gcc -march=rv32im -O3`.
 - Compiled canonical C references into vector RV32IMV assembly using `riscv64-elf-gcc -march=rv32imv -O3 -mrvv-max-lmul=m1`.
 - Preserved original compiler outputs and vectorization logs (`-fopt-info-vec`).
-- Adapted generated assembly into KITES-compliant assembly by:
-  - Stripping unsupported directives (`.file`, `.attribute`, `.size`, `.p2align`).
-  - Correcting compiler label syntax (`.L3` $\rightarrow$ `L3`).
-  - Normalizing unit-stride vector memory syntax (`vle32.v vd, 0(rs1)` $\rightarrow$ `vle32.v vd, (rs1)`).
-  - Emulating unsupported vector moves (`vmv.*`) using supported primitives (`vxor.vv`, vector spills).
+- Target Assembly Preparation:
+  - **Dot Product:** Adapted directly from compiler output by stripping unsupported directives (`.file`, `.attribute`, `.size`, `.p2align`), correcting compiler label syntax (`.L3` $\rightarrow$ `L3`), normalizing unit-stride vector memory syntax (`vle32.v vd, 0(rs1)` $\rightarrow$ `vle32.v vd, (rs1)`), emulating unsupported vector moves (`vmv.*`) using supported primitives (`vxor.vv`, vector memory spills), and leveraging `vmacc.vv`.
+  - **Matrix Multiplication, FIR Filter, Sobel:** Because GCC generated instructions outside KITES's implemented RVV subset (`vmv.v.x`, `vrgather.vv`, widening/narrowing arithmetic like `vwaddu`/`vwsubu`/`vnsrl`, and fractional LMUL like `mf2`/`mf4`), custom hand-written RVV replacement kernels conforming strictly to KITES constraints (`LMUL=m1` and supported instructions) were authored. For FIR filtering, the hand-written kernel restructured the loop hierarchy from an inner-product reduction across taps to an outer-product accumulation over samples using `vmacc.vx`.
 - Executed both scalar and vector versions in KITES via `kites-cli`.
 - Validated that scalar and vector simulation results match the golden C outputs (100% element and checksum matches).
-- Recorded dynamic instructions retired from the KITES hardware execution counters.
+- Recorded dynamic instructions retired from the KITES simulator execution counters.
 
 ### Phase 3: Analysis & Visualization *(Completed)*
 - Computed speedup and dynamic instruction count reduction percentages for both computational kernels and overall program runs.

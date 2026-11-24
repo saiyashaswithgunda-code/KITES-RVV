@@ -99,7 +99,6 @@ L_chk_loop:
 #  24..47:   row1 unpacked words (6 words)
 #  48..71:   row2 unpacked words (6 words)
 #  72..87:   output mag words (4 words)
-#  88..103:  saved registers
 sobel_filter_vector:
     # 1. Zero out output image (1024 bytes) using vse8.v
     vsetvli t0, zero, e8, m1, ta, ma

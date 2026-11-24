@@ -59,15 +59,23 @@ riscv64-elf-gcc -ffreestanding -DBAREMETAL -march=rv32imv -mabi=ilp32 -O3 -mrvv-
     -o benchmarks/matrix_multiplication/compiler_output/matrix_multiplication_vector_gcc.s
 ```
 
-## 7. KITES Simulation Assembly
+## 7. Vector Kernel Implementation Details (Custom RVV Kernel)
 Standalone, self-contained KITES assembly files are provided in [`kites_assembly/`](kites_assembly/):
 - **Scalar Assembly:** [`matrix_multiplication_scalar_kites.s`](kites_assembly/matrix_multiplication_scalar_kites.s)
 - **Vector Assembly:** [`matrix_multiplication_vector_kites.s`](kites_assembly/matrix_multiplication_vector_kites.s)
 
-### Vector Kernel Adaptation Details:
-1. **Matrix Output Zeroing:** Replaced compiler-generated fractional LMUL (`e8, mf4`) zeroing with native 32-bit vector zeroing using `vxor.vv v1, v1, v1` and `vse32.v` with `LMUL=m1` (zeroing 256 words in only 192 dynamic instructions).
-2. **Scalar-Vector Multiply-Accumulate:** In the $i$-$k$-$j$ loop order, $A[i \times N + k]$ is a scalar multiplier applied across row vector $B[k, :]$ into row vector $C[i, :]$. Rather than emulating scalar broadcasts via unsupported `vmv.v.x` and `vmadd.vv`, the kernel directly uses the newly implemented **`vmacc.vx vd, rs1, vs2`** instruction, streaming 4-element row slices with contiguous `vle32.v` and `vse32.v`.
-3. **Syntax Normalization:** Stripped leading dots from branch labels, normalized unit-stride vector memory addressing syntax from `0(rs1)` to `(rs1)`, and removed unsupported directives.
+### Motivation for Custom Implementation:
+GCC auto-vectorization generated vector code utilizing unsupported instructions and modes, specifically:
+- `vmv.v.x` scalar-to-vector broadcast instructions.
+- `vmadd.vv` multiply-add instructions.
+- Fractional LMUL modes (`e8, mf4`) for memory initialization.
+
+Because these operations are outside KITES's implemented RVV subset, the compiler-generated vector assembly could not be executed directly. A custom hand-written RVV replacement kernel was developed, strictly conforming to `LMUL=m1` and supported instructions.
+
+### Vector Kernel Design Highlights:
+1. **Matrix Output Zeroing:** Implemented native 32-bit vector zeroing using `vxor.vv v1, v1, v1` and `vse32.v` with `LMUL=m1` (clearing 256 words in only 192 dynamic instructions without fractional LMUL).
+2. **Scalar-Vector Multiply-Accumulate:** In the contiguous $i$-$k$-$j$ loop order, element $A[i \times N + k]$ acts as a constant scalar multiplier across row vector $B[k, :]$, accumulating into row vector $C[i, :]$. The custom kernel directly employs the newly implemented **`vmacc.vx vd, rs1, vs2`** instruction, streaming 4-element row slices with contiguous `vle32.v` and `vse32.v` without requiring vector broadcast dances.
+3. **Syntax Normalization:** Conforms to KITES assembly syntax (undotted labels, unit-stride addressing `(rs1)`, no unsupported pseudo-ops).
 
 ### Execution Commands:
 ```bash
@@ -80,7 +88,7 @@ build/cli/kites-cli benchmarks/matrix_multiplication/kites_assembly/matrix_multi
 
 ## 8. Simulation Results & Verification
 
-Simulation metrics extracted from hardware execution steps and recorded in [`results/execution_summary.json`](results/execution_summary.json):
+Simulation metrics extracted from simulator execution steps and recorded in [`results/execution_summary.json`](results/execution_summary.json):
 
 | Metric | Scalar (RV32IM) | Vector (RV32IMV) | Reduction / Speedup |
 | :--- | :---: | :---: | :---: |
